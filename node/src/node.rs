@@ -8,8 +8,7 @@ use crate::router::Router;
 use crate::vm::VM;
 
 pub struct Node {
-    pub path: PathBuf,
-    pub name: String,
+    path: PathBuf,
     router: Router,
     repo: Repo,
     vm: VM,
@@ -32,11 +31,14 @@ impl Node {
 
         Ok(Node {
             path,
-            name: "node".to_string(),
             router,
             repo,
             vm,
         })
+    }
+
+    pub fn router(&self) -> &Router {
+        &self.router
     }
 
     pub fn repo(&self) -> &Repo {

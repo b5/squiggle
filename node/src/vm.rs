@@ -1,8 +1,9 @@
 use anyhow::Result;
 use std::path::PathBuf;
 
+use flow::{Flow, FlowOutput};
+
 use crate::router::RouterClient;
-use crate::vm::flow::Flow;
 
 mod api;
 mod blobs;
@@ -39,14 +40,13 @@ impl VM {
     }
 
     // path is the path to a flow.toml to run
-    pub async fn run(&self, ws: &str, flow: Flow) -> Result<()> {
+    pub async fn run(&self, ws: &str, flow: Flow) -> Result<FlowOutput> {
         let workspace = self
             .workspaces
             .get(ws)
             .await
             .expect(format!("unknown workspace: {}", ws).as_str());
         let res = flow.run(&self.router, &workspace).await?;
-        println!("flow result: {:?}", res);
-        Ok(())
+        Ok(res)
     }
 }

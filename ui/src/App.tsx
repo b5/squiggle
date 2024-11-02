@@ -6,6 +6,7 @@ import "./App.css";
 function App() {
   const [greetMsg, setGreetMsg] = useState("");
   const [name, setName] = useState("");
+  const [flowResult, setFlowResult] = useState({});
 
   async function greet() {
     // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
@@ -15,6 +16,14 @@ function App() {
   async function listUsers() {
     const users = await invoke("list_users");
     console.log(users);
+  }
+
+  async function runFlow() {
+    let res = await invoke("run_flow", { path: "../../node/tests/wasm.toml" }).catch((e) => {
+      console.error(e);
+    });
+    console.log(res);
+    setFlowResult(res);
   }
 
   return (
@@ -33,6 +42,8 @@ function App() {
         </a>
       </div>
       <p>Click on the Tauri, Vite, and React logos to learn more.</p>
+      <button onClick={runFlow}>Run Flow</button>
+      <div>{JSON.stringify(flowResult)}</div>
 
       <form
         className="row"
