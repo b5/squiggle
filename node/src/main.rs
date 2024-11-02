@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use datalayer::node::Node;
+use datalayer_node::node::Node;
 
 #[tokio::main]
 async fn main() -> Result<()> {

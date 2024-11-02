@@ -12,6 +12,11 @@ function App() {
     setGreetMsg(await invoke("greet", { name }));
   }
 
+  async function listUsers() {
+    const users = await invoke("list_users");
+    console.log(users);
+  }
+
   return (
     <main className="container">
       <h1>Welcome to Tauri + React</h1>
@@ -34,6 +39,7 @@ function App() {
         onSubmit={(e) => {
           e.preventDefault();
           greet();
+          listUsers();
         }}
       >
         <input

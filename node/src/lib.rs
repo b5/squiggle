@@ -1,3 +1,3 @@
 pub mod node;
-pub(crate) mod repo;
+pub mod repo;
 pub(crate) mod router;

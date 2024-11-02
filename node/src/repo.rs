@@ -6,7 +6,7 @@ use self::db::{open_db, setup_db, DB};
 
 mod db;
 mod events;
-mod users;
+pub mod users;
 
 pub struct Repo {
     db: DB,
