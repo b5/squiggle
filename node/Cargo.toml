@@ -1,0 +1,17 @@
+[package]
+name = "datalayer"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.92"
+iroh = "0.27.0"
+rusqlite = "0.32.1"
+serde = { version = "1.0.214", features = ["derive"] }
+serde_json = "1.0.132"
+tokio = { version = "1.41.0", features = ["full"] }
+tracing = "0.1.40"
+wasi-common = "26.0.0"
+wasmtime = "26.0.0"
+wasmtime-wasi = "26.0.0"
+
