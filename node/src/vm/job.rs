@@ -15,7 +15,9 @@ use tokio::io::AsyncWriteExt;
 use tracing::debug;
 use uuid::Uuid;
 
-use super::{blobs::Blobs, node::IrohNodeClient};
+use crate::router::RouterClient;
+
+use super::blobs::Blobs;
 
 pub(crate) const JOBS_PREFIX: &str = "jobs";
 
@@ -344,7 +346,7 @@ impl JobContext {
         &self,
         path: impl AsRef<Path>,
         blobs: &Blobs,
-        node: &IrohNodeClient,
+        node: &RouterClient,
     ) -> Result<()> {
         // Todo: parallelize
 
@@ -385,7 +387,7 @@ impl JobContext {
         &self,
         path: impl AsRef<Path>,
         blobs: &Blobs,
-        node: &IrohNodeClient,
+        node: &RouterClient,
     ) -> Result<()> {
         // Todo: parallelize
         let path = path.as_ref();

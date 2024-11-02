@@ -5,11 +5,12 @@ use bollard::container::LogOutput;
 use futures::StreamExt;
 use tracing::{debug, info};
 
+use crate::router::RouterClient;
+
 use crate::vm::{
     blobs::Blobs,
     docker::{delete_container, get_docker, pull_docker_image, stop_container},
     job::JobContext,
-    node::IrohNodeClient,
 };
 
 use super::Executor;
@@ -17,14 +18,14 @@ use super::Executor;
 #[derive(Debug, Clone)]
 pub struct Docker {
     docker: bollard::Docker,
-    node: IrohNodeClient,
+    node: RouterClient,
     blobs: Blobs,
     /// Root folder to store shared files in
     root: PathBuf,
 }
 
 impl Docker {
-    pub async fn new(node: IrohNodeClient, blobs: Blobs, root: PathBuf) -> Result<Self> {
+    pub async fn new(node: RouterClient, blobs: Blobs, root: PathBuf) -> Result<Self> {
         let docker = get_docker().await?;
         tokio::fs::create_dir_all(&root).await?;
         let root = root.canonicalize()?;

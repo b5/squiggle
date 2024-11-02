@@ -6,12 +6,14 @@ use anyhow::{ensure, Context, Result};
 use futures::StreamExt;
 use iroh::base::node_addr::AddrInfoOptions;
 use iroh::client::docs::ShareMode;
-use iroh::docs::{store::Query, DocTicket, NamespaceId};
+use iroh::docs::{store::Query, AuthorId, DocTicket, NamespaceId};
 use iroh::net::NodeId;
 use tokio::sync::{RwLock, RwLockMappedWriteGuard, RwLockReadGuard, RwLockWriteGuard};
 use tokio::task::JoinHandle;
 use tracing::{debug, info, info_span, warn, Instrument};
 use uuid::Uuid;
+
+use crate::router::{Router, RouterClient};
 
 use super::blobs::Blobs;
 use super::config::NodeConfig;
@@ -19,7 +21,6 @@ use super::content_routing::AutofetchPolicy;
 use super::doc::{create_doc, join_doc, open_doc, subscribe, Doc, DocEventHandler};
 use super::job::{JobDescription, JobResult};
 use super::metrics::Metrics;
-use super::node::{node_author_id, IrohNode, IrohNodeClient};
 use super::scheduler::Scheduler;
 use super::worker::Worker;
 
@@ -41,7 +42,7 @@ impl Workspace {
     pub async fn create(
         name: String,
         node_id: NodeId,
-        node: &IrohNodeClient,
+        node: &RouterClient,
         cfg: WorkspaceConfig,
     ) -> Result<Self> {
         let doc = create_doc(node).await?;
@@ -57,7 +58,7 @@ impl Workspace {
 
     pub async fn join(
         node_id: NodeId,
-        node: &IrohNodeClient,
+        node: &RouterClient,
         ticket: DocTicket,
         cfg: WorkspaceConfig,
     ) -> Result<Self> {
@@ -70,7 +71,7 @@ impl Workspace {
     pub async fn open(
         name: String,
         node_id: NodeId,
-        node: &IrohNodeClient,
+        node: &RouterClient,
         doc: Doc,
         cfg: WorkspaceConfig,
     ) -> Result<Self> {
@@ -173,14 +174,14 @@ impl Workspace {
 
 #[derive(Debug, Clone)]
 pub struct Workspaces {
-    node: IrohNode,
+    node: RouterClient,
     path: PathBuf,
     inner: Arc<RwLock<HashMap<String, Workspace>>>,
     cfg: Arc<NodeConfig>,
 }
 
 impl Workspaces {
-    pub fn node(&self) -> &IrohNode {
+    pub fn node(&self) -> &RouterClient {
         &self.node
     }
 
@@ -205,8 +206,12 @@ impl Workspaces {
         self.inner.read().await.contains_key(name)
     }
 
-    pub async fn load_or_create(node: IrohNode, data_dir: &Path, cfg: NodeConfig) -> Result<Self> {
-        let path = data_dir.join(WORKSPACES_FILE_NAME);
+    pub async fn load_or_create(
+        node: RouterClient,
+        data_dir: impl Into<PathBuf>,
+        cfg: NodeConfig,
+    ) -> Result<Self> {
+        let path = data_dir.into().join(WORKSPACES_FILE_NAME);
         if !path.exists() {
             return Ok(Self {
                 node,
@@ -219,7 +224,7 @@ impl Workspaces {
         let file = std::fs::File::open(&path)?;
         let workspace_list: Vec<(String, NamespaceId)> = serde_json::from_reader(file)?;
         let workspaces = workspace_list.into_iter().map(|(_, id)| id).collect();
-        let workspaces = open_workspaces(&node, workspaces, &cfg).await?;
+        let workspaces = open_workspaces(node.clone(), workspaces, &cfg).await?;
 
         Ok(Self {
             node,
@@ -230,10 +235,11 @@ impl Workspaces {
     }
 
     pub async fn create_workspace(&self, name: &str) -> Result<()> {
+        let router_id = self.node.net().node_id().await?;
         let ws = Workspace::create(
             name.to_string(),
-            self.node.node_id(),
-            self.node.client(),
+            router_id,
+            &self.node.clone(),
             self.cfg.workspace_config(),
         )
         .await?;
@@ -247,10 +253,11 @@ impl Workspaces {
 
         let doc = join_doc(&self.node, ticket).await?;
         let name = load_name(&doc).await?;
+        let router_id = self.node.net().node_id().await?;
         if !self.contains(&name).await {
             let ws = Workspace::open(
                 name,
-                self.node.node_id(),
+                router_id,
                 &self.node,
                 doc,
                 self.cfg.workspace_config(),
@@ -278,16 +285,17 @@ impl Workspaces {
 }
 
 async fn open_workspaces(
-    node: &IrohNode,
+    node: RouterClient,
     workspaces: Vec<NamespaceId>,
     cfg: &NodeConfig,
 ) -> Result<HashMap<String, Workspace>> {
+    let router_id = node.net().node_id().await?;
     let mut ans = HashMap::new();
     for namespace_id in workspaces {
         let ws = open_workspace(
             namespace_id,
-            node.node_id(),
-            node.client(),
+            router_id,
+            &node.clone(),
             cfg.workspace_config(),
         )
         .await;
@@ -331,7 +339,7 @@ pub(crate) fn parse_name(key: &str) -> Result<&str> {
 async fn open_workspace(
     namespace_id: NamespaceId,
     node_id: NodeId,
-    node: &IrohNodeClient,
+    node: &RouterClient,
     cfg: WorkspaceConfig,
 ) -> Result<Workspace> {
     let doc = open_doc(node, namespace_id).await?;
@@ -342,4 +350,8 @@ async fn open_workspace(
 pub struct WorkspaceConfig {
     pub autofetch: AutofetchPolicy,
     pub worker_root: PathBuf,
+}
+
+pub(crate) fn node_author_id(node_id: &NodeId) -> AuthorId {
+    AuthorId::from(node_id.as_bytes())
 }

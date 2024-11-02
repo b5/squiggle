@@ -28,17 +28,6 @@ pub(crate) const ENV_PREFIX: &str = "FOG";
 #[derive(PartialEq, Eq, Debug, Deserialize, Serialize, Clone)]
 #[serde(default)]
 pub struct NodeConfig {
-    /// Host name to listen on.
-    pub s3_host: String,
-    /// Port number for S3 HTTP API to listen on.
-    pub s3_port: u16,
-    /// Access key used for S3 authentication.
-    pub s3_access_key: Option<String>,
-    /// Secret key used for S3 authentication.
-    pub s3_secret_key: Option<String>,
-    /// Domain name used for S3 virtual-hosted-style requests.
-    pub s3_domain_name: Option<String>,
-
     /// Control automatic content fetching within a workspace
     pub autofetch_default: AutofetchPolicy,
     /// Port number for the main iroh fog HTTP API to listen on.
@@ -59,13 +48,6 @@ pub struct NodeConfig {
 
     /// Root folder used for storing and retrieving assets shared with the worker.
     pub worker_root: PathBuf,
-
-    /// Discord workspace name for the iroh discord bot.
-    pub discord_workspace: Option<String>,
-    /// Discord bot token for the iroh discord bot.
-    pub discord_token: Option<String>,
-    /// The domain used for accessing the bot results.
-    pub discord_s3_domain: Option<String>,
 }
 
 impl Default for NodeConfig {
@@ -74,11 +56,6 @@ impl Default for NodeConfig {
             tempfile::TempDir::with_prefix("fog-worker").expect("unable to create tempdir");
         let worker_root = worker_root.into_path();
         Self {
-            s3_host: "localhost".to_string(),
-            s3_port: 8014,
-            s3_access_key: Some("access".to_string()),
-            s3_secret_key: Some("secret".to_string()),
-            s3_domain_name: Some("localhost:8014".to_string()),
             api_port: 8015,
             metrics_port: Some(8016),
             iroh_port: 0,
@@ -86,10 +63,7 @@ impl Default for NodeConfig {
             gc_policy: GcPolicy::Disabled,
             autofetch_default: AutofetchPolicy::Disabled,
             tracing_endpoint: None,
-            discord_workspace: None,
-            discord_token: None,
             worker_root,
-            discord_s3_domain: None,
         }
     }
 }
@@ -187,21 +161,6 @@ impl NodeConfig {
             any_switched = true;
         }
 
-        // check if s3_port is open, if not, change it to a new port, update the config, and add it to open_ports
-        if is_port_in_use(self.s3_port) {
-            info!("s3_port is in use");
-            let mut new_port = self.s3_port;
-            while is_port_in_use(new_port)
-                || new_port == self.iroh_port
-                || new_port == self.api_port
-            {
-                new_port += 1;
-            }
-            warn!("s3_port was taken. switching to {}", new_port);
-            self.s3_port = new_port;
-            any_switched = true;
-        }
-
         if let Some(metrics) = self.metrics_port {
             if is_port_in_use(metrics) {
                 info!("metrics_port is in use");
@@ -209,7 +168,6 @@ impl NodeConfig {
                 while is_port_in_use(new_port)
                     || new_port == self.iroh_port
                     || new_port == self.api_port
-                    || new_port == self.s3_port
                 {
                     new_port += 1;
                 }

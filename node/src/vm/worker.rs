@@ -19,6 +19,8 @@ use tokio::sync::Mutex;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
+use crate::router::RouterClient;
+
 use super::blobs::Blobs;
 use super::doc::{DocEventHandler, Event, EventData};
 use super::job::{
@@ -26,7 +28,6 @@ use super::job::{
     JobType, ScheduledJob, JOBS_PREFIX,
 };
 use super::metrics::Metrics;
-use super::node::IrohNodeClient;
 use super::scheduler::{parse_status, SchedulerEvent};
 
 use self::executor::Executors;
@@ -41,7 +42,7 @@ pub struct Worker {
     executors: Executors,
     doc: Doc,
     blobs: Blobs,
-    node: IrohNodeClient,
+    node: RouterClient,
     current_jobs: Arc<Mutex<HashSet<Uuid>>>,
     /// If this worker will accept work.
     enabled: Arc<AtomicBool>,
@@ -52,7 +53,7 @@ impl Worker {
         author_id: AuthorId,
         doc: Doc,
         blobs: Blobs,
-        node: IrohNodeClient,
+        node: RouterClient,
         root: impl AsRef<Path>,
     ) -> Result<Self> {
         let executors = Executors::new(node.clone(), blobs.clone(), root).await?;

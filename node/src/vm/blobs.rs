@@ -9,9 +9,10 @@ use iroh::net::NodeId;
 
 use tracing::{debug, warn};
 
+use crate::router::RouterClient;
+
 use super::content_routing::{AutofetchPolicy, ContentRouter};
 use super::doc::{Doc, Event, EventData};
-use super::node::IrohNodeClient;
 
 /// prefix used for blobs in the doc
 pub(crate) const BLOBS_DOC_PREFIX: &str = "blobs";
@@ -20,18 +21,13 @@ pub(crate) const BLOBS_DOC_PREFIX: &str = "blobs";
 pub struct Blobs {
     // nodeID doubles as the author ID for this replica when writing to the doc
     node_id: NodeId,
-    node: IrohNodeClient,
+    node: RouterClient,
     doc: Doc,
     content_router: ContentRouter,
 }
 
 impl Blobs {
-    pub fn new(
-        node_id: NodeId,
-        doc: Doc,
-        node: IrohNodeClient,
-        autofetch: AutofetchPolicy,
-    ) -> Self {
+    pub fn new(node_id: NodeId, doc: Doc, node: RouterClient, autofetch: AutofetchPolicy) -> Self {
         let author_id = iroh::docs::AuthorId::from(node_id.as_bytes());
         let content_router =
             ContentRouter::new(author_id, node_id, doc.clone(), node.clone(), autofetch);

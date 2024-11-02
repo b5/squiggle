@@ -8,20 +8,22 @@ use iroh::net::NodeId;
 use tracing::{debug, info, trace};
 use uuid::Uuid;
 
+use crate::router::RouterClient;
+
 use super::blobs::Blobs;
 use super::doc::{Doc, DocEventHandler, Event, EventData};
 use super::job::{
     JobDescription, JobResult, JobResultStatus, JobStatus, ScheduledJob, JOBS_PREFIX,
 };
 use super::metrics::Metrics;
-use super::node::{node_author_id, IrohNodeClient};
 use super::worker::{ExecutionStatus, WorkerEvent};
+use super::workspace::node_author_id;
 
 #[derive(Clone, Debug)]
 pub struct Scheduler {
     author_id: AuthorId, // author_id must be matched to the node_id doing the scheduling
     blobs: Blobs,
-    node: IrohNodeClient,
+    node: RouterClient,
     doc: Doc,
     job_subscriptions: async_broadcast::Sender<(Uuid, JobStatus)>,
     job_r: async_broadcast::InactiveReceiver<(Uuid, JobStatus)>,
@@ -34,7 +36,7 @@ impl Scheduler {
         author_id: AuthorId,
         doc: Doc,
         blobs: Blobs,
-        node: IrohNodeClient,
+        node: RouterClient,
     ) -> Result<Self> {
         let (mut s, r) = async_broadcast::broadcast(128);
         s.set_await_active(false);

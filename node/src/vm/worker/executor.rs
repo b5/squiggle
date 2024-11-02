@@ -3,10 +3,10 @@ use std::path::Path;
 use anyhow::{bail, Result};
 use tracing::{debug, warn};
 
-use super::super::{
+use crate::router::RouterClient;
+use crate::vm::{
     blobs::Blobs,
     job::{JobContext, JobType},
-    node::IrohNodeClient,
 };
 
 use self::{docker::Docker, wasm::Wasm};
@@ -31,7 +31,7 @@ pub struct Executors {
 }
 
 impl Executors {
-    pub async fn new(node: IrohNodeClient, blobs: Blobs, root: impl AsRef<Path>) -> Result<Self> {
+    pub async fn new(node: RouterClient, blobs: Blobs, root: impl AsRef<Path>) -> Result<Self> {
         let docker_root = root.as_ref().join("docker");
         let docker = match Docker::new(node.clone(), blobs.clone(), docker_root).await {
             Ok(docker) => Some(docker),

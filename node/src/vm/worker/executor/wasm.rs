@@ -8,13 +8,14 @@ use wasmtime_wasi::pipe::MemoryOutputPipe;
 use wasmtime_wasi::{preview1, DirPerms, FilePerms};
 use wasmtime_wasi::{WasiCtxBuilder, WasiP1Ctx};
 
-use crate::vm::{blobs::Blobs, node::IrohNodeClient};
+use crate::router::RouterClient;
+use crate::vm::blobs::Blobs;
 
 use super::Executor;
 
 #[derive(derive_more::Debug, Clone)]
 pub struct Wasm {
-    node: IrohNodeClient,
+    node: RouterClient,
     blobs: Blobs,
     /// Root folder to store shared files in
     root: PathBuf,
@@ -23,7 +24,7 @@ pub struct Wasm {
 }
 
 impl Wasm {
-    pub async fn new(node: IrohNodeClient, blobs: Blobs, root: PathBuf) -> Result<Self> {
+    pub async fn new(node: RouterClient, blobs: Blobs, root: PathBuf) -> Result<Self> {
         // Construct the wasm engine with async support enabled.
         let mut config = Config::new();
         config.async_support(true);

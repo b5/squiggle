@@ -14,9 +14,10 @@ use tokio::net::TcpListener;
 use tracing::{debug, error, info};
 use uuid::Uuid;
 
+use crate::router::RouterClient;
+
 use super::flow::Flow;
 use super::job::JobDescription;
-use super::node::IrohNode;
 use super::workspace::Workspaces;
 
 #[derive(Debug, Clone)]
@@ -32,12 +33,12 @@ impl Deref for FogApi {
 
 #[derive(Clone, Debug)]
 pub struct Inner {
-    pub(crate) node: IrohNode,
+    pub(crate) node: RouterClient,
     pub(crate) workspaces: Arc<Workspaces>,
 }
 
 impl FogApi {
-    pub fn new(node: IrohNode, workspaces: Workspaces) -> Self {
+    pub fn new(node: RouterClient, workspaces: Workspaces) -> Self {
         let workspaces = Arc::new(workspaces);
         Self(Inner { node, workspaces })
     }

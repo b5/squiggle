@@ -5,12 +5,13 @@ use iroh::docs::{DocTicket, NamespaceId};
 use iroh::net::NodeId;
 use tracing::{trace, warn};
 
+use crate::router::RouterClient;
+
 use super::blobs::{parse_blobs_event, BlobsEvent, BLOBS_DOC_PREFIX};
 use super::content_routing::{
     parse_content_routing_event, ContentRoutingEvent, CONTENT_ROUTING_PREFIX,
 };
 use super::job::JOBS_PREFIX;
-use super::node::IrohNodeClient;
 use super::scheduler::{parse_scheduler_event, SchedulerEvent};
 use super::worker::{parse_worker_event, WorkerEvent, WORKER_PREFIX};
 
@@ -23,13 +24,13 @@ pub(crate) const EMPTY_OK_VALUE: &[u8] = b"ok";
 const DEFAULT_POLICY: iroh::docs::store::DownloadPolicy =
     iroh::docs::store::DownloadPolicy::NothingExcept(vec![]);
 
-pub async fn create_doc(node: &IrohNodeClient) -> Result<Doc> {
+pub async fn create_doc(node: &RouterClient) -> Result<Doc> {
     let doc = node.docs().create().await?;
     configure_doc(&doc).await?;
     Ok(doc)
 }
 
-pub async fn join_doc(node: &IrohNodeClient, ticket: DocTicket) -> Result<Doc> {
+pub async fn join_doc(node: &RouterClient, ticket: DocTicket) -> Result<Doc> {
     let doc = node.docs().import(ticket).await?;
     wait_for_sync_finished(&doc).await?;
     configure_doc(&doc).await?;
@@ -52,7 +53,7 @@ async fn wait_for_sync_finished(doc: &Doc) -> Result<()> {
     bail!("sync finished event not found")
 }
 
-pub async fn open_doc(node: &IrohNodeClient, namespace_id: NamespaceId) -> Result<Doc> {
+pub async fn open_doc(node: &RouterClient, namespace_id: NamespaceId) -> Result<Doc> {
     let doc = node
         .docs()
         .open(namespace_id)

@@ -9,9 +9,10 @@ use iroh::net::{AddrInfo, NodeAddr, NodeId};
 use serde::{Deserialize, Serialize};
 use tracing::trace;
 
+use crate::router::RouterClient;
+
 use super::doc::{Doc, Event, EventData, EMPTY_OK_VALUE};
 use super::metrics::Metrics;
-use super::node::IrohNodeClient;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AutofetchPolicy {
@@ -34,7 +35,7 @@ pub(crate) struct ContentRouter {
     author_id: AuthorId,
     node_id: NodeId,
     doc: Doc,
-    node: IrohNodeClient,
+    node: RouterClient,
     autofetch: AutofetchPolicy,
 }
 
@@ -43,7 +44,7 @@ impl ContentRouter {
         author_id: AuthorId,
         node_id: NodeId,
         doc: Doc,
-        node: IrohNodeClient,
+        node: RouterClient,
         autofetch: AutofetchPolicy,
     ) -> Self {
         Self {
@@ -155,11 +156,7 @@ impl ContentRouter {
     }
 }
 
-async fn fetch_blob_from_provider(
-    node: &IrohNodeClient,
-    hash: Hash,
-    provider: NodeId,
-) -> Result<()> {
+async fn fetch_blob_from_provider(node: &RouterClient, hash: Hash, provider: NodeId) -> Result<()> {
     trace!(
         hash = %hash,
         provider = %provider,
@@ -227,7 +224,7 @@ fn provider_key(hash: Hash, node_id: NodeId) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::vm::node::create_iroh;
+    use crate::vm::test_utils::create_router;
     use crate::vm::workspace::Workspace;
     use crate::vm::{config::NodeConfig, test_utils::setup_logging};
     use anyhow::{Context, Result};
@@ -248,7 +245,7 @@ mod tests {
             ..Default::default()
         };
 
-        let node_1 = create_iroh(&repo_1_path, cfg1).await?;
+        let node_1 = create_router(&repo_1_path, cfg1).await?;
         let ws1 = Workspace::create(
             String::from(ws_name),
             node_1.node_id(),
@@ -267,7 +264,7 @@ mod tests {
             autofetch_default: AutofetchPolicy::All,
             ..Default::default()
         };
-        let node_2 = create_iroh(&repo_2_path, cfg2).await?;
+        let node_2 = create_router(&repo_2_path, cfg2).await?;
         let ws2 =
             Workspace::join(node_2.node_id(), &node_2, ticket, cfg2.workspace_config()).await?;
 

@@ -13,10 +13,11 @@ use tokio::task::JoinSet;
 use tracing::{debug, info, instrument, warn};
 use uuid::Uuid;
 
+use crate::router::RouterClient;
+
 use super::blobs::Blobs;
 use super::job::{JobDescription, JobNameContext, JobResult, JobResultStatus};
 use super::metrics::Metrics;
-use super::node::IrohNodeClient;
 use super::scheduler::Scheduler;
 use super::workspace::Workspace;
 
@@ -76,7 +77,7 @@ pub struct FlowOutput {
 
 impl Flow {
     #[instrument(skip_all, fields(flow_name = %self.name))]
-    pub async fn run(self, node: &IrohNodeClient, workspace: &Workspace) -> Result<FlowOutput> {
+    pub async fn run(self, node: &RouterClient, workspace: &Workspace) -> Result<FlowOutput> {
         iroh_metrics::inc!(Metrics, flow_run_started);
         let scope = Uuid::new_v4();
 
@@ -230,7 +231,7 @@ impl Task {
     pub fn run(
         self,
         scope: Uuid,
-        node: &IrohNodeClient,
+        node: &RouterClient,
         scheduler: Scheduler,
         blobs: Blobs,
         job_id: Uuid,
@@ -394,8 +395,8 @@ mod tests {
 
     use crate::vm::{
         job::{Artifact, Artifacts, JobDetails, JobOutput, JobStatus, DEFAULT_TIMEOUT},
-        node::node_author_id,
         test_utils::{create_nodes, setup_logging},
+        workspace::node_author_id,
     };
 
     #[test]
