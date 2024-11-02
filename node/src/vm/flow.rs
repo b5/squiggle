@@ -76,6 +76,12 @@ pub struct FlowOutput {
 }
 
 impl Flow {
+    pub async fn load(path: impl AsRef<std::path::Path>) -> Result<Self> {
+        let flow = tokio::fs::read_to_string(path).await?;
+        let flow = toml::from_str(&flow)?;
+        Ok(flow)
+    }
+
     #[instrument(skip_all, fields(flow_name = %self.name))]
     pub async fn run(self, node: &RouterClient, workspace: &Workspace) -> Result<FlowOutput> {
         iroh_metrics::inc!(Metrics, flow_run_started);

@@ -234,7 +234,7 @@ impl Workspaces {
         })
     }
 
-    pub async fn create_workspace(&self, name: &str) -> Result<()> {
+    pub async fn create(&self, name: &str) -> Result<()> {
         let router_id = self.node.net().node_id().await?;
         let ws = Workspace::create(
             name.to_string(),
