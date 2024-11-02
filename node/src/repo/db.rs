@@ -1,10 +1,11 @@
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use anyhow::Result;
 use rusqlite::Connection;
 use tokio::sync::Mutex;
 
-pub(crate) type DB = Mutex<Connection>;
+pub(crate) type DB = Arc<Mutex<Connection>>;
 
 // {
 // "id": "4376c65d2f232afbe9b882a35baa4f6fe8667c4e684749af565f981833ed6a65",
@@ -21,7 +22,7 @@ pub(crate) type DB = Mutex<Connection>;
 
 pub(crate) async fn open_db(path: impl Into<PathBuf>) -> Result<DB> {
     let db = Connection::open(path.into())?;
-    Ok(Mutex::new(db))
+    Ok(Arc::new(Mutex::new(db)))
 }
 
 pub(crate) async fn setup_db(db: &DB) -> Result<()> {
@@ -35,6 +36,17 @@ pub(crate) async fn setup_db(db: &DB) -> Result<()> {
             content TEXT NOT NULL,
             tags TEXT NOT NULL,
             sig TEXT NOT NULL
+        )",
+        [],
+    )?;
+
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS users (
+            pubkey BLOB NOT NULL,
+            privkey BLOB,
+            name TEXT,
+            about TEXT,
+            picture TEXT
         )",
         [],
     )?;

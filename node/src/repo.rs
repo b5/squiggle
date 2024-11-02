@@ -6,6 +6,7 @@ use self::db::{open_db, setup_db, DB};
 
 mod db;
 mod events;
+mod users;
 
 pub struct Repo {
     db: DB,
@@ -21,5 +22,9 @@ impl Repo {
 
     pub async fn list_events(&self) -> Result<Vec<events::Event>> {
         events::list(&self.db).await
+    }
+
+    pub fn users(&self) -> users::Users {
+        users::Users::new(self.db.clone())
     }
 }
