@@ -7,7 +7,7 @@ use iroh::net::{discovery::dns::DnsDiscovery, relay::RelayMode, NodeId};
 use iroh::util::path::IrohPaths;
 use tracing::{debug, info};
 
-use crate::config::NodeConfig;
+use super::config::NodeConfig;
 
 pub type IrohNode = iroh::node::FsNode;
 pub type IrohNodeClient = iroh::client::Iroh;

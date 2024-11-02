@@ -9,9 +9,9 @@ use iroh::net::{AddrInfo, NodeAddr, NodeId};
 use serde::{Deserialize, Serialize};
 use tracing::trace;
 
-use crate::doc::{Doc, Event, EventData, EMPTY_OK_VALUE};
-use crate::metrics::Metrics;
-use crate::node::IrohNodeClient;
+use super::doc::{Doc, Event, EventData, EMPTY_OK_VALUE};
+use super::metrics::Metrics;
+use super::node::IrohNodeClient;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AutofetchPolicy {
@@ -227,9 +227,9 @@ fn provider_key(hash: Hash, node_id: NodeId) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::node::create_iroh;
-    use crate::workspace::Workspace;
-    use crate::{config::NodeConfig, test_utils::setup_logging};
+    use crate::vm::node::create_iroh;
+    use crate::vm::workspace::Workspace;
+    use crate::vm::{config::NodeConfig, test_utils::setup_logging};
     use anyhow::{Context, Result};
     use iroh::base::node_addr::AddrInfoOptions;
     use std::time::Duration;

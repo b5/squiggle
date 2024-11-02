@@ -65,7 +65,7 @@ impl Metric for Metrics {
 
 pub fn try_init_metrics_collection() -> std::io::Result<()> {
     iroh_metrics::core::Core::try_init(|reg, metrics| {
-        metrics.insert(crate::metrics::Metrics::new(reg));
+        metrics.insert(crate::vm::metrics::Metrics::new(reg));
         metrics.insert(iroh::docs::metrics::Metrics::new(reg));
         metrics.insert(iroh::net::metrics::MagicsockMetrics::new(reg));
         metrics.insert(iroh::net::metrics::NetcheckMetrics::new(reg));

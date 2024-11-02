@@ -14,10 +14,10 @@ use tokio::net::TcpListener;
 use tracing::{debug, error, info};
 use uuid::Uuid;
 
-use crate::flow::Flow;
-use crate::job::JobDescription;
-use crate::node::IrohNode;
-use crate::workspace::Workspaces;
+use super::flow::Flow;
+use super::job::JobDescription;
+use super::node::IrohNode;
+use super::workspace::Workspaces;
 
 #[derive(Debug, Clone)]
 pub struct FogApi(Inner);
@@ -43,7 +43,6 @@ impl FogApi {
     }
 
     pub async fn serve(&self, port: u16) -> Result<()> {
-        // build our application with a single route
         let app = Router::new()
             .route("/status", post(|| async { (StatusCode::OK, "ok") }))
             .route("/:workspace/jobs", post(run_job_handler))

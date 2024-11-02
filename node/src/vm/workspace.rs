@@ -13,15 +13,15 @@ use tokio::task::JoinHandle;
 use tracing::{debug, info, info_span, warn, Instrument};
 use uuid::Uuid;
 
-use crate::blobs::Blobs;
-use crate::config::NodeConfig;
-use crate::content_routing::AutofetchPolicy;
-use crate::doc::{create_doc, join_doc, open_doc, subscribe, Doc, DocEventHandler};
-use crate::job::{JobDescription, JobResult};
-use crate::metrics::Metrics;
-use crate::node::{node_author_id, IrohNode, IrohNodeClient};
-use crate::scheduler::Scheduler;
-use crate::worker::Worker;
+use super::blobs::Blobs;
+use super::config::NodeConfig;
+use super::content_routing::AutofetchPolicy;
+use super::doc::{create_doc, join_doc, open_doc, subscribe, Doc, DocEventHandler};
+use super::job::{JobDescription, JobResult};
+use super::metrics::Metrics;
+use super::node::{node_author_id, IrohNode, IrohNodeClient};
+use super::scheduler::Scheduler;
+use super::worker::Worker;
 
 const WORKSPACES_FILE_NAME: &str = "workspaces.json";
 const WORKSPACE_NAME_KEY: &str = "workspace";

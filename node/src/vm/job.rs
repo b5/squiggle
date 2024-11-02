@@ -15,7 +15,7 @@ use tokio::io::AsyncWriteExt;
 use tracing::debug;
 use uuid::Uuid;
 
-use crate::{blobs::Blobs, node::IrohNodeClient};
+use super::{blobs::Blobs, node::IrohNodeClient};
 
 pub(crate) const JOBS_PREFIX: &str = "jobs";
 

@@ -13,12 +13,12 @@ use tokio::task::JoinSet;
 use tracing::{debug, info, instrument, warn};
 use uuid::Uuid;
 
-use crate::blobs::Blobs;
-use crate::job::{JobDescription, JobNameContext, JobResult, JobResultStatus};
-use crate::metrics::Metrics;
-use crate::node::IrohNodeClient;
-use crate::scheduler::Scheduler;
-use crate::workspace::Workspace;
+use super::blobs::Blobs;
+use super::job::{JobDescription, JobNameContext, JobResult, JobResultStatus};
+use super::metrics::Metrics;
+use super::node::IrohNodeClient;
+use super::scheduler::Scheduler;
+use super::workspace::Workspace;
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Flow {
@@ -392,7 +392,7 @@ impl Task {
 mod tests {
     use super::*;
 
-    use crate::{
+    use crate::vm::{
         job::{Artifact, Artifacts, JobDetails, JobOutput, JobStatus, DEFAULT_TIMEOUT},
         node::node_author_id,
         test_utils::{create_nodes, setup_logging},

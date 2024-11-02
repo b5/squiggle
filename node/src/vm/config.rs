@@ -13,8 +13,8 @@ use iroh::node::GcPolicy;
 use serde::{Deserialize, Serialize};
 use tracing::{info, trace, warn};
 
-use crate::content_routing::AutofetchPolicy;
-use crate::workspace::WorkspaceConfig;
+use super::content_routing::AutofetchPolicy;
+use super::workspace::WorkspaceConfig;
 
 /// CONFIG_FILE_NAME is the name of the optional config file located in the iroh home directory
 pub(crate) const CONFIG_FILE_NAME: &str = "fog.config.toml";

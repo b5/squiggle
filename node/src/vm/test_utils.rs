@@ -6,10 +6,10 @@ use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::Layer;
 use tracing_subscriber::{fmt, EnvFilter};
 
-use crate::config::NodeConfig;
-use crate::node::create_iroh;
-use crate::node::IrohNode;
-use crate::workspace::Workspace;
+use super::config::NodeConfig;
+use super::node::create_iroh;
+use super::node::IrohNode;
+use super::workspace::Workspace;
 
 pub fn setup_logging() {
     let subscriber = fmt::layer().with_filter(EnvFilter::from_default_env());

@@ -9,9 +9,9 @@ use iroh::net::NodeId;
 
 use tracing::{debug, warn};
 
-use crate::content_routing::{AutofetchPolicy, ContentRouter};
-use crate::doc::{Doc, Event, EventData};
-use crate::node::IrohNodeClient;
+use super::content_routing::{AutofetchPolicy, ContentRouter};
+use super::doc::{Doc, Event, EventData};
+use super::node::IrohNodeClient;
 
 /// prefix used for blobs in the doc
 pub(crate) const BLOBS_DOC_PREFIX: &str = "blobs";
@@ -169,7 +169,7 @@ fn event_components(key: &str) -> Result<&str> {
 
 #[cfg(test)]
 mod tests {
-    use crate::test_utils::create_nodes;
+    use crate::vm::test_utils::create_nodes;
     use anyhow::{Context, Result};
 
     #[tokio::test]

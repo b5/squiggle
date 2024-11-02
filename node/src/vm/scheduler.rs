@@ -8,14 +8,14 @@ use iroh::net::NodeId;
 use tracing::{debug, info, trace};
 use uuid::Uuid;
 
-use crate::blobs::Blobs;
-use crate::doc::{Doc, DocEventHandler, Event, EventData};
-use crate::job::{
+use super::blobs::Blobs;
+use super::doc::{Doc, DocEventHandler, Event, EventData};
+use super::job::{
     JobDescription, JobResult, JobResultStatus, JobStatus, ScheduledJob, JOBS_PREFIX,
 };
-use crate::metrics::Metrics;
-use crate::node::{node_author_id, IrohNodeClient};
-use crate::worker::{ExecutionStatus, WorkerEvent};
+use super::metrics::Metrics;
+use super::node::{node_author_id, IrohNodeClient};
+use super::worker::{ExecutionStatus, WorkerEvent};
 
 #[derive(Clone, Debug)]
 pub struct Scheduler {
@@ -475,8 +475,8 @@ mod tests {
 
     use anyhow::{Context, Result};
 
-    use crate::job::{Artifact, Artifacts, JobDetails, JobOutput, DEFAULT_TIMEOUT};
-    use crate::test_utils::{create_nodes, setup_logging};
+    use crate::vm::job::{Artifact, Artifacts, JobDetails, JobOutput, DEFAULT_TIMEOUT};
+    use crate::vm::test_utils::{create_nodes, setup_logging};
 
     #[tokio::test]
     async fn test_work_schedule_assign() -> Result<()> {

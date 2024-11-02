@@ -5,14 +5,14 @@ use iroh::docs::{DocTicket, NamespaceId};
 use iroh::net::NodeId;
 use tracing::{trace, warn};
 
-use crate::blobs::{parse_blobs_event, BlobsEvent, BLOBS_DOC_PREFIX};
-use crate::content_routing::{
+use super::blobs::{parse_blobs_event, BlobsEvent, BLOBS_DOC_PREFIX};
+use super::content_routing::{
     parse_content_routing_event, ContentRoutingEvent, CONTENT_ROUTING_PREFIX,
 };
-use crate::job::JOBS_PREFIX;
-use crate::node::IrohNodeClient;
-use crate::scheduler::{parse_scheduler_event, SchedulerEvent};
-use crate::worker::{parse_worker_event, WorkerEvent, WORKER_PREFIX};
+use super::job::JOBS_PREFIX;
+use super::node::IrohNodeClient;
+use super::scheduler::{parse_scheduler_event, SchedulerEvent};
+use super::worker::{parse_worker_event, WorkerEvent, WORKER_PREFIX};
 
 pub use iroh::client::Doc;
 

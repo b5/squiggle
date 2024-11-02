@@ -3,7 +3,7 @@ use std::path::Path;
 use anyhow::{bail, Result};
 use tracing::{debug, warn};
 
-use crate::{
+use super::super::{
     blobs::Blobs,
     job::{JobContext, JobType},
     node::IrohNodeClient,

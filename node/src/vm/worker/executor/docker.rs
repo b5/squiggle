@@ -5,7 +5,7 @@ use bollard::container::LogOutput;
 use futures::StreamExt;
 use tracing::{debug, info};
 
-use crate::{
+use crate::vm::{
     blobs::Blobs,
     docker::{delete_container, get_docker, pull_docker_image, stop_container},
     job::JobContext,

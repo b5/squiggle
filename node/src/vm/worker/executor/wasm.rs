@@ -8,7 +8,7 @@ use wasmtime_wasi::pipe::MemoryOutputPipe;
 use wasmtime_wasi::{preview1, DirPerms, FilePerms};
 use wasmtime_wasi::{WasiCtxBuilder, WasiP1Ctx};
 
-use crate::{blobs::Blobs, node::IrohNodeClient};
+use crate::vm::{blobs::Blobs, node::IrohNodeClient};
 
 use super::Executor;
 
@@ -42,7 +42,11 @@ impl Executor for Wasm {
     type Job = Job;
     type Report = Report;
 
-    async fn execute(&self, ctx: &crate::job::JobContext, job: Self::Job) -> Result<Self::Report> {
+    async fn execute(
+        &self,
+        ctx: &crate::vm::job::JobContext,
+        job: Self::Job,
+    ) -> Result<Self::Report> {
         let downloads_path = ctx.downloads_path(&self.root);
         let uploads_path = ctx.uploads_path(&self.root);
         tokio::fs::create_dir_all(&downloads_path).await?;

@@ -19,15 +19,15 @@ use tokio::sync::Mutex;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
-use crate::blobs::Blobs;
-use crate::doc::{DocEventHandler, Event, EventData};
-use crate::job::{
+use super::blobs::Blobs;
+use super::doc::{DocEventHandler, Event, EventData};
+use super::job::{
     JobContext, JobDetails, JobNameContext, JobOutput, JobResult, JobResultStatus, JobStatus,
     JobType, ScheduledJob, JOBS_PREFIX,
 };
-use crate::metrics::Metrics;
-use crate::node::IrohNodeClient;
-use crate::scheduler::{parse_status, SchedulerEvent};
+use super::metrics::Metrics;
+use super::node::IrohNodeClient;
+use super::scheduler::{parse_status, SchedulerEvent};
 
 use self::executor::Executors;
 
