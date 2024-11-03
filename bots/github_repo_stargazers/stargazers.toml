@@ -1,0 +1,19 @@
+name = "github_repo_stargazers"
+
+[[uploads]]
+name = "github_repo_stargazers.wasm"
+[uploads.source.file]
+# path = "./dist/plugin.wasm"
+path = "../bots/github_repo_stargazers/dist/plugin.wasm"
+
+[[tasks]]
+
+[tasks.description]
+name = "run"
+
+[[tasks.description.artifacts.downloads]]
+path = "github_repo_stargazers.wasm"
+name = "{scope}/github_repo_stargazers.wasm"
+
+[tasks.description.details.wasm]
+module = "github_repo_stargazers.wasm"

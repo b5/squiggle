@@ -18,8 +18,11 @@ async fn main() -> Result<()> {
     //     )
     //     .await?;
     println!("Current working directory: {:?}", std::env::current_dir()?);
-    let flow = datalayer_node::vm::flow::Flow::load("./tests/wasm.toml").await?;
-    node.vm().run(DEFAULT_WORKSPACE, flow).await?;
+    let flow =
+        datalayer_node::vm::flow::Flow::load("../bots/github_repo_stargazers/stargazers.toml")
+            .await?;
+    let res = node.vm().run(DEFAULT_WORKSPACE, flow).await?;
+    println!("Flow output: {:?}", res);
     // println!(
     //     "Hello, world: {:?} events: {:?} users: {:?}",
     //     node.name,

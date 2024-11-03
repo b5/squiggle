@@ -9,7 +9,7 @@ use crate::vm::{
     job::{JobContext, JobType},
 };
 
-use self::{docker::Docker, wasm::Wasm};
+use self::{docker::Docker, wasm::WasmExecutor};
 
 pub mod docker;
 pub mod wasm;
@@ -27,7 +27,7 @@ pub trait Executor {
 #[derive(Debug, Clone)]
 pub struct Executors {
     docker: Option<Docker>,
-    wasm: Wasm,
+    wasm: WasmExecutor,
 }
 
 impl Executors {
@@ -42,7 +42,7 @@ impl Executors {
             }
         };
         let wasm_root = root.as_ref().join("wasm");
-        let wasm = Wasm::new(node, blobs, wasm_root).await?;
+        let wasm = WasmExecutor::new(node, blobs, wasm_root).await?;
 
         Ok(Self { docker, wasm })
     }

@@ -2,16 +2,17 @@
 * [x] Sqlite Events Table
 * [x] VM Compiles 
 * [x] list accounts on frontend
-* [ ] Automation 
+* [ ] Automation 1
   * [x] Hello-world WASM Execution
   * [x] Tasks & Jobs
   * [x] Wire up job kickoff to the frontend
-  * [ ] interface to write blobs
+  * [x] interface to write blobs (re-using fog uploads dir)
   * [ ] write a task that creates one or more blobs
 * [ ] Events 1
   * [ ] Jobs are associated with accounts
   * [ ] create event on job run
   * [ ] interface to write events
+  * [ ] written from a job get a collection
 * [ ] Data Modeling 1
   * [ ] URL-as-anchor datums
   * [ ] Mechanism for Grouping Datums
@@ -32,3 +33,4 @@
 * [ ] Access Control 1
   * [ ] 
 * [ ] Blob Persistence
+* [ ] Secrets for Bots

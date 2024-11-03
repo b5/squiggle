@@ -300,8 +300,7 @@ pub enum JobOutput {
         stdout: String,
     },
     Wasm {
-        stderr: String,
-        stdout: String,
+        output: String,
     },
 }
 

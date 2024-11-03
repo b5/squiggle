@@ -1,12 +1,8 @@
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
+use extism::*;
 use tracing::debug;
-use wasi_common::sync::{ambient_authority, Dir};
-use wasmtime::{Config, Engine, Linker, Module, Store};
-use wasmtime_wasi::pipe::MemoryOutputPipe;
-use wasmtime_wasi::{preview1, DirPerms, FilePerms};
-use wasmtime_wasi::{WasiCtxBuilder, WasiP1Ctx};
 
 use crate::router::RouterClient;
 use crate::vm::blobs::Blobs;
@@ -14,32 +10,24 @@ use crate::vm::blobs::Blobs;
 use super::Executor;
 
 #[derive(derive_more::Debug, Clone)]
-pub struct Wasm {
-    node: RouterClient,
+pub struct WasmExecutor {
+    router: RouterClient,
     blobs: Blobs,
     /// Root folder to store shared files in
     root: PathBuf,
-    #[debug("wasmtime::Engine")]
-    engine: Engine,
 }
 
-impl Wasm {
-    pub async fn new(node: RouterClient, blobs: Blobs, root: PathBuf) -> Result<Self> {
-        // Construct the wasm engine with async support enabled.
-        let mut config = Config::new();
-        config.async_support(true);
-        let engine = Engine::new(&config)?;
-
-        Ok(Wasm {
-            node,
+impl WasmExecutor {
+    pub async fn new(router: RouterClient, blobs: Blobs, root: PathBuf) -> Result<Self> {
+        Ok(WasmExecutor {
+            router,
             blobs,
             root,
-            engine,
         })
     }
 }
 
-impl Executor for Wasm {
+impl Executor for WasmExecutor {
     type Job = Job;
     type Report = Report;
 
@@ -54,56 +42,28 @@ impl Executor for Wasm {
         tokio::fs::create_dir_all(&uploads_path).await?;
 
         debug!("downloading artifacts to {}", downloads_path.display());
-        ctx.write_downloads(&downloads_path, &self.blobs, &self.node)
+        ctx.write_downloads(&downloads_path, &self.blobs, &self.router)
             .await
             .context("write downloads")?;
 
-        // TODO: figure out if there is a more efficient way to reuse the store & linker
+        let path = Wasm::file(downloads_path.join(&job.module));
 
-        let mut linker: Linker<WasiP1Ctx> = Linker::new(&self.engine);
-        preview1::add_to_linker_async(&mut linker, |t| t)?;
+        let manifest = Manifest::new([path]).with_allowed_host("*");
+        let wasm_context = UserData::new(WasmContext {
+            router: self.router.clone(),
+        });
+        let builder = PluginBuilder::new(manifest).with_wasi(true);
+        let mut plugin = add_host_functions(builder, wasm_context).build()?;
 
-        let stdout = MemoryOutputPipe::new(1024 * 1024);
-        let stderr = MemoryOutputPipe::new(1024 * 1024);
-        let wasi_ctx = WasiCtxBuilder::new()
-            .stdout(stdout.clone())
-            .stderr(stderr.clone())
-            .preopened_dir(
-                Dir::open_ambient_dir(&uploads_path, ambient_authority())?,
-                DirPerms::MUTATE,
-                FilePerms::WRITE,
-                "uploads",
-            )
-            .preopened_dir(
-                Dir::open_ambient_dir(&downloads_path, ambient_authority())?,
-                DirPerms::MUTATE,
-                FilePerms::WRITE,
-                "downloads",
-            )
-            .build_p1();
-        let mut store = Store::new(&self.engine, wasi_ctx);
-
-        // Note: This is a module built against the preview1 WASI API.
-        let mod_path = downloads_path.join(&job.module);
-        debug!("loading module from {}", mod_path.display());
-        let module = Module::from_file(&self.engine, mod_path)?;
-        let func = linker
-            .module_async(&mut store, "", &module)
-            .await?
-            .get_default(&mut store, "")?
-            .typed::<(), ()>(&store)?;
-
-        // Invoke the WASI program default function.
-        func.call_async(&mut store, ()).await?;
+        let output = plugin.call::<&str, &str>("main", "hello")?;
 
         debug!("uploading artifacts from {}", uploads_path.display());
-        ctx.read_uploads(&uploads_path, &self.blobs, &self.node)
+        ctx.read_uploads(&uploads_path, &self.blobs, &self.router)
             .await
             .context("read uploads")?;
 
         Ok(Report {
-            stdout: String::from_utf8_lossy(&stdout.contents()).into(),
-            stderr: String::from_utf8_lossy(&stderr.contents()).into(),
+            output: output.to_string(),
         })
     }
 }
@@ -116,6 +76,49 @@ pub struct Job {
 
 #[derive(Debug)]
 pub struct Report {
-    pub stdout: String,
-    pub stderr: String,
+    pub output: String,
+}
+
+struct WasmContext {
+    router: RouterClient,
+}
+
+host_fn!(iroh_blob_get_ticket(_user_data: WasmContext; _ticket: &str) -> Vec<u8> {
+    // let ctx = user_data.get()?;
+    // let ctx = ctx.lock().unwrap();
+
+    // let (node_addr, hash, format) = iroh::base::ticket::BlobTicket::from_str(ticket).map_err(|_| anyhow!("invalid ticket"))?.into_parts();
+
+    // if format != iroh::blobs::BlobFormat::Raw {
+    //     return Err(anyhow!("can only get raw bytes for now, not HashSequences (collections)"));
+    // }
+    // let client = ctx.iroh.client();
+    // let buf = ctx.rt.block_on(async move {
+    //     let mut stream = client.blobs().download_with_opts(hash, iroh::client::blobs::DownloadOptions {
+    //         format,
+    //         nodes: vec![node_addr],
+    //         mode: iroh::client::blobs::DownloadMode::Queued,
+    //         tag: SetTagOption::Auto,
+    //     }).await?;
+    //     while stream.next().await.is_some() {}
+
+    //     let buffer = client.blobs().read(hash).await?.read_to_bytes().await?;
+    //     anyhow::Ok(buffer.to_vec())
+    // })?;
+
+    // Ok(buf)
+    Ok(vec![])
+});
+
+fn add_host_functions(
+    builder: PluginBuilder,
+    wasm_context: UserData<WasmContext>,
+) -> PluginBuilder {
+    builder.with_function(
+        "iroh_blob_get_ticket",
+        [PTR],
+        [PTR],
+        wasm_context,
+        iroh_blob_get_ticket,
+    )
 }

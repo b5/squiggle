@@ -162,10 +162,7 @@ impl Worker {
                     module: module.clone(),
                 };
                 let res = self.executors.execute_wasm(&job_ctx, job).await?;
-                Ok(JobOutput::Wasm {
-                    stderr: res.stderr,
-                    stdout: res.stdout,
-                })
+                Ok(JobOutput::Wasm { output: res.output })
             }
         }
     }
