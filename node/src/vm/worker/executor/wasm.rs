@@ -48,7 +48,14 @@ impl Executor for WasmExecutor {
 
         let path = Wasm::file(downloads_path.join(&job.module));
 
-        let manifest = Manifest::new([path]).with_allowed_host("*");
+        let paths = vec![
+            ("downloads".to_string(), downloads_path.clone()),
+            ("uploads".to_string(), uploads_path.clone()),
+        ]
+        .into_iter();
+        let manifest = Manifest::new([path])
+            .with_allowed_host("*")
+            .with_allowed_paths(paths);
         let wasm_context = UserData::new(WasmContext {
             router: self.router.clone(),
         });

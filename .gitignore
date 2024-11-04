@@ -24,3 +24,6 @@ dist-ssr
 *.sw?
 
 **/target
+
+node/target/*
+node/test/**
