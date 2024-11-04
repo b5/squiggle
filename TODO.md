@@ -8,6 +8,13 @@
   * [x] Wire up job kickoff to the frontend
   * [x] interface to write blobs (re-using fog uploads dir)
   * [ ] write a task that creates one or more blobs
+* App Detour 1:
+  * [ ] build out project scores database:
+    * [ ] encode existing notion table as jsonschema:
+      * can we just use notion's schema for this?
+      * let's start with some simple illustration that adheres to jsonschema
+    * [ ] add schema as a collection: 1th blob is schema, prior schemas are 2-Nth blobs
+    * [ ] add a single event for every entry
 * [ ] Events 1
   * [ ] Jobs are associated with accounts
   * [ ] create event on job run

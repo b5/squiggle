@@ -41,7 +41,7 @@ struct Event {
 
 ```
 Events [
-  meta: [ timestamp, author, kind, pubkey, created_at, sig ]
+  meta: [[ timestamp, author, kind, pubkey, created_at, sig ]]
   Event... [
     meta: [ ]
     Schema [
@@ -56,6 +56,7 @@ Events [
   ]
 ]
 ```
+
 
 
 ```json
@@ -73,4 +74,16 @@ Events [
 }
 ```
 
-The Nostr Protocol event definition is 90% metadata
+* The Nostr Protocol event definition is 90% metadata, so move most of it into the "meta" section of the collection
+* Bots write to schemas
+* App data is the union of all schemas in the the event stream
+  * a context is a single author, plus a set of remote authors
+
+
+
+```
+bot [
+  meta: [[ name, version, url ]]
+  binaries... []
+]
+```

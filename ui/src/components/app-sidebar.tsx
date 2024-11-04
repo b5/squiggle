@@ -1,4 +1,4 @@
-import { Home, Search, Settings, User, Building } from "lucide-react"
+import { Home, Bot, User, Building } from "lucide-react"
 
 import {
   Sidebar,
@@ -10,34 +10,30 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
+import { Link } from "react-router-dom"
 
 // Menu items.
 const items = [
   {
     title: "Home",
-    url: "#",
+    url: "/",
     icon: Home,
   },
   {
     title: "People",
-    url: "#",
+    url: "/people",
     icon: User,
   },
   {
     title: "Projects",
-    url: "#",
+    url: "/projects",
     icon: Building,
   },
   {
-    title: "Search",
-    url: "#",
-    icon: Search,
-  },
-  {
-    title: "Settings",
-    url: "#",
-    icon: Settings,
-  },
+    title: "Bots",
+    url: "/bots",
+    icon: Bot
+  }
 ]
 
 export function AppSidebar() {
@@ -51,10 +47,10 @@ export function AppSidebar() {
               {items.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild>
-                    <a href={item.url}>
+                    <Link to={item.url}>
                       <item.icon />
                       <span>{item.title}</span>
-                    </a>
+                    </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}

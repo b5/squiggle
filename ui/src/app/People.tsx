@@ -11,7 +11,7 @@ import { DataTableRowActions } from "@/components/data-table-row-actions"
 import { DataTable } from "@/components/data-table";
 import people from "@/data/people.json";
 
-export default function People() {
+export function Component() {
   return (
     <div className="p-4">
       <DataTable data={people} columns={columns} />
