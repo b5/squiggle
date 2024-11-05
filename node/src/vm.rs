@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use flow::{Flow, FlowOutput};
 
-use crate::router::RouterClient;
+use crate::repo::Repo;
 
 mod api;
 mod blobs;
@@ -24,19 +24,19 @@ mod test_utils;
 pub const DEFAULT_WORKSPACE: &str = "default";
 
 pub struct VM {
-    router: RouterClient,
+    repo: Repo,
     workspaces: workspace::Workspaces,
 }
 
 impl VM {
-    pub async fn new(router: RouterClient, path: impl Into<PathBuf>) -> Result<Self> {
+    pub async fn new(repo: Repo, path: impl Into<PathBuf>) -> Result<Self> {
         // TODO(b5): move configuration up a level
         let cfg = config::NodeConfig::default();
-        let workspaces = workspace::Workspaces::load_or_create(router.clone(), path, cfg).await?;
+        let workspaces = workspace::Workspaces::load_or_create(repo.clone(), path, cfg).await?;
         if !workspaces.contains(DEFAULT_WORKSPACE).await {
             workspaces.create(DEFAULT_WORKSPACE).await?;
         }
-        Ok(VM { router, workspaces })
+        Ok(VM { repo, workspaces })
     }
 
     // path is the path to a flow.toml to run
@@ -46,7 +46,7 @@ impl VM {
             .get(ws)
             .await
             .expect(format!("unknown workspace: {}", ws).as_str());
-        let res = flow.run(&self.router, &workspace).await?;
+        let res = flow.run(&self.repo, &workspace).await?;
         Ok(res)
     }
 }

@@ -19,7 +19,7 @@ use tokio::sync::Mutex;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
-use crate::router::RouterClient;
+use crate::repo::Repo;
 
 use super::blobs::Blobs;
 use super::doc::{DocEventHandler, Event, EventData};
@@ -42,7 +42,7 @@ pub struct Worker {
     executors: Executors,
     doc: Doc,
     blobs: Blobs,
-    node: RouterClient,
+    repo: Repo,
     current_jobs: Arc<Mutex<HashSet<Uuid>>>,
     /// If this worker will accept work.
     enabled: Arc<AtomicBool>,
@@ -53,16 +53,16 @@ impl Worker {
         author_id: AuthorId,
         doc: Doc,
         blobs: Blobs,
-        node: RouterClient,
+        repo: Repo,
         root: impl AsRef<Path>,
     ) -> Result<Self> {
-        let executors = Executors::new(node.clone(), blobs.clone(), root).await?;
+        let executors = Executors::new(repo.clone(), blobs.clone(), root).await?;
         let w = Self {
             author_id,
             executors,
             doc,
             blobs,
-            node,
+            repo,
             current_jobs: Default::default(),
             enabled: Arc::new(AtomicBool::new(true)),
         };
@@ -273,7 +273,7 @@ impl Worker {
 
     async fn get_scheduled_job(&self, job_hash: Hash) -> Result<ScheduledJob> {
         self.blobs.fetch_blob(job_hash).await?;
-        let data = self.node.blobs().read_to_bytes(job_hash).await?;
+        let data = self.repo.router().blobs().read_to_bytes(job_hash).await?;
         let jd = ScheduledJob::try_from(data)?;
         Ok(jd)
     }
@@ -344,14 +344,14 @@ impl Worker {
         // only execute job if we're in the requesting phase
         if is_our_job && status == ExecutionStatus::Requested {
             let self2 = self.clone();
-            let node2 = self.node.clone();
+            let node2 = self.repo.clone();
 
             iroh_metrics::inc!(Metrics, worker_jobs_running);
             let res = async {
                 self.set_execution_state(job_id, ExecutionStatus::Running, job_hash, job_len)
                     .await?;
 
-                let data = node2.blobs().read_to_bytes(job_hash).await?;
+                let data = node2.router().blobs().read_to_bytes(job_hash).await?;
                 let scheduled_job = ScheduledJob::try_from(data)?;
                 let timeout: std::time::Duration = scheduled_job
                     .description

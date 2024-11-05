@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::{ensure, Context, Result};
@@ -13,7 +13,8 @@ use tokio::task::JoinHandle;
 use tracing::{debug, info, info_span, warn, Instrument};
 use uuid::Uuid;
 
-use crate::router::{Router, RouterClient};
+use crate::repo::Repo;
+use crate::router::RouterClient;
 
 use super::blobs::Blobs;
 use super::config::NodeConfig;
@@ -42,10 +43,10 @@ impl Workspace {
     pub async fn create(
         name: String,
         node_id: NodeId,
-        node: &RouterClient,
+        repo: &Repo,
         cfg: WorkspaceConfig,
     ) -> Result<Self> {
-        let doc = create_doc(node).await?;
+        let doc = create_doc(repo.router()).await?;
         let author_id = node_author_id(&node_id);
 
         // TODO: use values again when they are inlined
@@ -53,36 +54,37 @@ impl Workspace {
         doc.set_bytes(author_id, key, name.clone()).await?;
         load_name(&doc).await.context("just set?")?;
 
-        Self::open(name, node_id, node, doc, cfg).await
+        Self::open(name, node_id, repo, doc, cfg).await
     }
 
     pub async fn join(
         node_id: NodeId,
-        node: &RouterClient,
+        repo: &Repo,
         ticket: DocTicket,
         cfg: WorkspaceConfig,
     ) -> Result<Self> {
         debug!("joining {}", ticket);
-        let doc = join_doc(node, ticket).await?;
+        let doc = join_doc(repo.router(), ticket).await?;
         let name = load_name(&doc).await?;
-        Self::open(name, node_id, node, doc, cfg).await
+        Self::open(name, node_id, repo, doc, cfg).await
     }
 
     pub async fn open(
         name: String,
         node_id: NodeId,
-        node: &RouterClient,
+        repo: &Repo,
         doc: Doc,
         cfg: WorkspaceConfig,
     ) -> Result<Self> {
-        let blobs = Blobs::new(node_id, doc.clone(), node.clone(), cfg.autofetch);
+        let blobs = Blobs::new(node_id, doc.clone(), repo.router().clone(), cfg.autofetch);
         let author_id = node_author_id(&node_id);
-        let scheduler = Scheduler::new(author_id, doc.clone(), blobs.clone(), node.clone()).await?;
+        let scheduler =
+            Scheduler::new(author_id, doc.clone(), blobs.clone(), repo.router().clone()).await?;
         let worker = Worker::new(
             author_id,
             doc.clone(),
             blobs.clone(),
-            node.clone(),
+            repo.clone(),
             &cfg.worker_root,
         )
         .await?;
@@ -174,7 +176,7 @@ impl Workspace {
 
 #[derive(Debug, Clone)]
 pub struct Workspaces {
-    node: RouterClient,
+    repo: Repo,
     path: PathBuf,
     inner: Arc<RwLock<HashMap<String, Workspace>>>,
     cfg: Arc<NodeConfig>,
@@ -182,7 +184,7 @@ pub struct Workspaces {
 
 impl Workspaces {
     pub fn node(&self) -> &RouterClient {
-        &self.node
+        &self.repo.router()
     }
 
     pub async fn list(&self) -> Vec<String> {
@@ -207,14 +209,14 @@ impl Workspaces {
     }
 
     pub async fn load_or_create(
-        node: RouterClient,
+        repo: Repo,
         data_dir: impl Into<PathBuf>,
         cfg: NodeConfig,
     ) -> Result<Self> {
         let path = data_dir.into().join(WORKSPACES_FILE_NAME);
         if !path.exists() {
             return Ok(Self {
-                node,
+                repo,
                 path: path.clone(),
                 inner: Default::default(),
                 cfg: Arc::new(cfg),
@@ -224,10 +226,10 @@ impl Workspaces {
         let file = std::fs::File::open(&path)?;
         let workspace_list: Vec<(String, NamespaceId)> = serde_json::from_reader(file)?;
         let workspaces = workspace_list.into_iter().map(|(_, id)| id).collect();
-        let workspaces = open_workspaces(node.clone(), workspaces, &cfg).await?;
+        let workspaces = open_workspaces(repo.clone(), workspaces, &cfg).await?;
 
         Ok(Self {
-            node,
+            repo,
             path,
             inner: Arc::new(RwLock::new(workspaces)),
             cfg: Arc::new(cfg),
@@ -235,11 +237,11 @@ impl Workspaces {
     }
 
     pub async fn create(&self, name: &str) -> Result<()> {
-        let router_id = self.node.net().node_id().await?;
+        let router_id = self.repo.router().net().node_id().await?;
         let ws = Workspace::create(
             name.to_string(),
             router_id,
-            &self.node.clone(),
+            &self.repo.clone(),
             self.cfg.workspace_config(),
         )
         .await?;
@@ -251,14 +253,15 @@ impl Workspaces {
     pub async fn join_workspace(&self, ticket: DocTicket) -> Result<()> {
         debug!("joining workspace, ticket: {:?}", ticket);
 
-        let doc = join_doc(&self.node, ticket).await?;
+        let router = self.repo.router();
+        let doc = join_doc(router, ticket).await?;
         let name = load_name(&doc).await?;
-        let router_id = self.node.net().node_id().await?;
+        let router_id = router.net().node_id().await?;
         if !self.contains(&name).await {
             let ws = Workspace::open(
                 name,
                 router_id,
-                &self.node,
+                &self.repo,
                 doc,
                 self.cfg.workspace_config(),
             )
@@ -285,20 +288,14 @@ impl Workspaces {
 }
 
 async fn open_workspaces(
-    node: RouterClient,
+    repo: Repo,
     workspaces: Vec<NamespaceId>,
     cfg: &NodeConfig,
 ) -> Result<HashMap<String, Workspace>> {
-    let router_id = node.net().node_id().await?;
+    let router_id = repo.router().net().node_id().await?;
     let mut ans = HashMap::new();
     for namespace_id in workspaces {
-        let ws = open_workspace(
-            namespace_id,
-            router_id,
-            &node.clone(),
-            cfg.workspace_config(),
-        )
-        .await;
+        let ws = open_workspace(namespace_id, router_id, &repo, cfg.workspace_config()).await;
         let ws = match ws {
             Ok(doc) => doc,
             Err(err) => {
@@ -339,12 +336,12 @@ pub(crate) fn parse_name(key: &str) -> Result<&str> {
 async fn open_workspace(
     namespace_id: NamespaceId,
     node_id: NodeId,
-    node: &RouterClient,
+    repo: &Repo,
     cfg: WorkspaceConfig,
 ) -> Result<Workspace> {
-    let doc = open_doc(node, namespace_id).await?;
+    let doc = open_doc(repo.router(), namespace_id).await?;
     let workspace_name = load_name(&doc).await?;
-    Workspace::open(workspace_name, node_id, node, doc, cfg).await
+    Workspace::open(workspace_name, node_id, repo, doc, cfg).await
 }
 
 pub struct WorkspaceConfig {

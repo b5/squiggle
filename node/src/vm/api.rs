@@ -14,7 +14,7 @@ use tokio::net::TcpListener;
 use tracing::{debug, error, info};
 use uuid::Uuid;
 
-use crate::router::RouterClient;
+use crate::repo::Repo;
 
 use super::flow::Flow;
 use super::job::JobDescription;
@@ -33,14 +33,14 @@ impl Deref for FogApi {
 
 #[derive(Clone, Debug)]
 pub struct Inner {
-    pub(crate) node: RouterClient,
+    pub(crate) repo: Repo,
     pub(crate) workspaces: Arc<Workspaces>,
 }
 
 impl FogApi {
-    pub fn new(node: RouterClient, workspaces: Workspaces) -> Self {
+    pub fn new(repo: Repo, workspaces: Workspaces) -> Self {
         let workspaces = Arc::new(workspaces);
-        Self(Inner { node, workspaces })
+        Self(Inner { repo, workspaces })
     }
 
     pub async fn serve(&self, port: u16) -> Result<()> {
@@ -92,7 +92,7 @@ async fn run_flow_handler(
 ) -> impl IntoResponse {
     debug!("Received flow for workspace {}: {:?}", workspace, flow);
     let ws = app.workspaces.get(&workspace).await.unwrap();
-    match flow.run(&app.node, &ws).await {
+    match flow.run(&app.repo, &ws).await {
         Ok(result) => {
             let data = serde_json::to_string(&result).unwrap();
             (StatusCode::OK, data)

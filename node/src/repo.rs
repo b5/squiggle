@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 
 use anyhow::Result;
-use iroh::blobs::Hash;
 
 use self::db::{open_db, setup_db, DB};
 use crate::router::RouterClient;
@@ -11,7 +10,7 @@ pub mod events;
 pub mod schemas;
 pub mod users;
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Repo {
     db: DB,
     router: RouterClient,
@@ -23,6 +22,10 @@ impl Repo {
         let db = open_db(&path).await?;
         setup_db(&db).await?;
         Ok(Repo { router, db })
+    }
+
+    pub fn router(&self) -> &RouterClient {
+        &self.router
     }
 
     pub fn users(&self) -> users::Users {

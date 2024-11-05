@@ -26,7 +26,7 @@ impl Node {
         router.authors().import(author.clone()).await?;
 
         let repo = Repo::open(router.client().clone(), &path).await?;
-        let vm = VM::new(router.client().clone(), &path).await?;
+        let vm = VM::new(repo.clone(), &path).await?;
 
         Ok(Node { router, repo, vm })
     }

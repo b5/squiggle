@@ -4,26 +4,22 @@ use anyhow::{Context, Result};
 use extism::*;
 use tracing::debug;
 
-use crate::router::RouterClient;
+use crate::repo::Repo;
 use crate::vm::blobs::Blobs;
 
 use super::Executor;
 
 #[derive(derive_more::Debug, Clone)]
 pub struct WasmExecutor {
-    router: RouterClient,
+    repo: Repo,
     blobs: Blobs,
     /// Root folder to store shared files in
     root: PathBuf,
 }
 
 impl WasmExecutor {
-    pub async fn new(router: RouterClient, blobs: Blobs, root: PathBuf) -> Result<Self> {
-        Ok(WasmExecutor {
-            router,
-            blobs,
-            root,
-        })
+    pub async fn new(repo: Repo, blobs: Blobs, root: PathBuf) -> Result<Self> {
+        Ok(WasmExecutor { repo, blobs, root })
     }
 }
 
@@ -42,7 +38,7 @@ impl Executor for WasmExecutor {
         tokio::fs::create_dir_all(&uploads_path).await?;
 
         debug!("downloading artifacts to {}", downloads_path.display());
-        ctx.write_downloads(&downloads_path, &self.blobs, &self.router)
+        ctx.write_downloads(&downloads_path, &self.blobs, self.repo.router())
             .await
             .context("write downloads")?;
 
@@ -57,7 +53,7 @@ impl Executor for WasmExecutor {
             .with_allowed_host("*")
             .with_allowed_paths(paths);
         let wasm_context = UserData::new(WasmContext {
-            router: self.router.clone(),
+            repo: self.repo.clone(),
         });
         let builder = PluginBuilder::new(manifest).with_wasi(true);
         let mut plugin = add_host_functions(builder, wasm_context).build()?;
@@ -65,7 +61,7 @@ impl Executor for WasmExecutor {
         let output = plugin.call::<&str, &str>("main", "hello")?;
 
         debug!("uploading artifacts from {}", uploads_path.display());
-        ctx.read_uploads(&uploads_path, &self.blobs, &self.router)
+        ctx.read_uploads(&uploads_path, &self.blobs, self.repo.router())
             .await
             .context("read uploads")?;
 
@@ -87,8 +83,18 @@ pub struct Report {
 }
 
 struct WasmContext {
-    router: RouterClient,
+    // TODO - use passed-in author
+    repo: Repo,
 }
+
+// host_fn!(mutate(ctx: WasmContext; schema: &str, id: &str, data: &str) -> Vec<u8> {
+//     let ctx = ctx.get()?;
+//     let ctx = ctx.lock().unwrap();
+
+//     let author = ctx.repo.router().authors().default().await?;
+//     let event = ctx.repo.events().mutate(author, schema, id, data).await?;
+//     Ok(vec![])
+// });
 
 host_fn!(iroh_blob_get_ticket(_user_data: WasmContext; _ticket: &str) -> Vec<u8> {
     // let ctx = user_data.get()?;
@@ -128,4 +134,5 @@ fn add_host_functions(
         wasm_context,
         iroh_blob_get_ticket,
     )
+    // .with_function("mutate", [PTR, PTR], [PTR], wasm_context, mutate)
 }

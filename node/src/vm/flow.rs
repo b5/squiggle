@@ -13,7 +13,7 @@ use tokio::task::JoinSet;
 use tracing::{debug, info, instrument, warn};
 use uuid::Uuid;
 
-use crate::router::RouterClient;
+use crate::repo::Repo;
 
 use super::blobs::Blobs;
 use super::job::{JobDescription, JobNameContext, JobResult, JobResultStatus};
@@ -83,7 +83,7 @@ impl Flow {
     }
 
     #[instrument(skip_all, fields(flow_name = %self.name))]
-    pub async fn run(self, node: &RouterClient, workspace: &Workspace) -> Result<FlowOutput> {
+    pub async fn run(self, repo: &Repo, workspace: &Workspace) -> Result<FlowOutput> {
         iroh_metrics::inc!(Metrics, flow_run_started);
         let scope = Uuid::new_v4();
 
@@ -101,12 +101,15 @@ impl Flow {
 
                     let file = tokio::fs::File::open(file_path).await?;
                     let file = BufReader::new(file);
-                    node.blobs()
+                    repo.router()
+                        .blobs()
                         .add_reader(file, SetTagOption::Auto)
                         .await?
                         .await?
                 }
-                UploadSource::Inline { content } => node.blobs().add_bytes(content.clone()).await?,
+                UploadSource::Inline { content } => {
+                    repo.router().blobs().add_bytes(content.clone()).await?
+                }
             };
             let name = format!("{}/{}", scope.as_simple(), upload.name);
             workspace
@@ -121,7 +124,7 @@ impl Flow {
             let i = task
                 .run(
                     scope,
-                    node,
+                    repo,
                     workspace.scheduler().clone(),
                     workspace.blobs().clone(),
                     job_id,
@@ -237,7 +240,7 @@ impl Task {
     pub fn run(
         self,
         scope: Uuid,
-        node: &RouterClient,
+        repo: &Repo,
         scheduler: Scheduler,
         blobs: Blobs,
         job_id: Uuid,
@@ -248,7 +251,7 @@ impl Task {
         iroh_metrics::inc!(Metrics, task_run_started);
 
         for task in self.tasks.into_iter() {
-            let n2 = node.clone();
+            let n2 = repo.clone();
             let s2 = scheduler.clone();
             let b2 = blobs.clone();
             let job_id = Uuid::new_v4();

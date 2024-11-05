@@ -4,7 +4,6 @@ use iroh::net::key::PublicKey;
 use rusqlite::params;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use sha2::{Digest, Sha256};
-use tracing::event;
 use std::fmt;
 use std::str::FromStr;
 use uuid::Uuid;

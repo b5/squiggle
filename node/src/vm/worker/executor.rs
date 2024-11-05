@@ -3,7 +3,7 @@ use std::path::Path;
 use anyhow::{bail, Result};
 use tracing::{debug, warn};
 
-use crate::router::RouterClient;
+use crate::repo::Repo;
 use crate::vm::{
     blobs::Blobs,
     job::{JobContext, JobType},
@@ -31,9 +31,9 @@ pub struct Executors {
 }
 
 impl Executors {
-    pub async fn new(node: RouterClient, blobs: Blobs, root: impl AsRef<Path>) -> Result<Self> {
+    pub async fn new(repo: Repo, blobs: Blobs, root: impl AsRef<Path>) -> Result<Self> {
         let docker_root = root.as_ref().join("docker");
-        let docker = match Docker::new(node.clone(), blobs.clone(), docker_root).await {
+        let docker = match Docker::new(repo.clone(), blobs.clone(), docker_root).await {
             Ok(docker) => Some(docker),
             Err(err) => {
                 debug!("docker error: {:?}", err);
@@ -42,7 +42,7 @@ impl Executors {
             }
         };
         let wasm_root = root.as_ref().join("wasm");
-        let wasm = WasmExecutor::new(node, blobs, wasm_root).await?;
+        let wasm = WasmExecutor::new(repo, blobs, wasm_root).await?;
 
         Ok(Self { docker, wasm })
     }
