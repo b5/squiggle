@@ -143,6 +143,7 @@ impl Worker {
         let job_ctx = JobContext {
             author,
             id: job_id,
+            environment: scheduled_job.description.environment.clone(),
             name: scheduled_job.description.name.clone(),
             name_context: JobNameContext {
                 scope: scheduled_job.scope,

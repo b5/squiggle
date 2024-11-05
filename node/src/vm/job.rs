@@ -1,15 +1,12 @@
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeSet, HashMap},
     path::{Path, PathBuf},
 };
 
 use anyhow::{bail, Context, Result};
 use bytes::Bytes;
-use iroh::{
-    blobs::{util::SetTagOption, Hash},
-    docs::{Author, AuthorId},
-    net::key::PublicKey,
-};
+use iroh::blobs::{util::SetTagOption, Hash};
+use iroh::docs::{Author, AuthorId};
 use serde::{Deserialize, Serialize};
 use tinytemplate::TinyTemplate;
 use tokio::io::AsyncWriteExt;
@@ -130,6 +127,8 @@ pub struct JobDescription {
     /// the identifier of the user to run the job as.
     /// Must have private half of key stored locally
     pub author: String,
+    // configuration to pass to execution environment
+    pub environment: HashMap<String, String>,
     /// Job details.
     pub details: JobDetails,
     #[serde(default)]
@@ -313,6 +312,7 @@ pub enum JobOutput {
 pub struct JobContext {
     /// Job id
     pub id: Uuid,
+    pub environment: HashMap<String, String>,
     /// Job name
     pub name: String,
     pub name_context: JobNameContext,
