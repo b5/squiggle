@@ -15,9 +15,13 @@ HashSequences form a really nice substrate for places where we'd normally use me
 struct Event {
   id: Sha512Hash,
   pubkey: Ed25519PublicKey
-  kind: 10000 // nostr "structured data" kind
-  schema: Blake3Hash // HashSequence of schema, the "table" this data belongs to
-  content: Blake3Hash // HashSequence of content, the "row"
+  kind: 10000 // nostr "write structured data" kind
+  created_at: DateTime,
+  content: [
+    schema: Blake3Hash, // HashSequence of schema, the "table" this data belongs to
+    id: Uuid,           // identifier for this datum. Not editable in userland beyond create / delete
+    value: Blake3Hash,  // Hash of serialized content. History is formed by the event stream itself, last writer wins, delete writes form tombstones
+  ]
   tags: Vec<(String,String,Option<String>) // relations
   sig: Ed25519Signature
 }
@@ -43,7 +47,7 @@ struct Event {
 Events [
   meta: [[ timestamp, author, kind, pubkey, created_at, sig ]]
   Event... [
-    meta: [ ]
+    meta: [ id ]
     Schema [
       meta: 
     ]
@@ -56,7 +60,6 @@ Events [
   ]
 ]
 ```
-
 
 
 ```json
@@ -86,4 +89,17 @@ bot [
   meta: [[ name, version, url ]]
   binaries... []
 ]
+```
+
+
+## Data Table
+* We need identifiers for datums, so we can track histories, these need to go into the event stream
+
+Here's what a structured data event should look like:
+
+```rust
+struct Event {
+  id: 
+}
+
 ```

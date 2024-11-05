@@ -9,6 +9,7 @@ async-broadcast = "0.7.1"
 axum = "0.7.7"
 bollard = "0.17.1"
 bytes = "1.8.0"
+chrono = "0.4.38"
 config = "0.14.1"
 derive_more = { version = "1.0.0", features = ["display", "from_str", "debug"] }
 dirs = "5.0.1"
@@ -17,12 +18,14 @@ ed25519-dalek = { version = "2.1.1", features = ["rand_core"] }
 extism = "1.8.0"
 futures = "0.3.31"
 futures-buffered = "0.2.9"
+hex = { version = "0.4.3", features = ["serde"] }
 iroh = "0.27.0"
 iroh-metrics = "0.27.0"
 rand = "0.8.5"
-rusqlite = "0.32.1"
+rusqlite = { version = "0.32.1", features = ["uuid"] }
 serde = { version = "1.0.214", features = ["derive"] }
 serde_json = "1.0.132"
+sha2 = "0.10.8"
 tempfile = "3.13.0"
 time = { version = "0.3.34", features = ["serde-human-readable"] }
 tinytemplate = "1.2.1"

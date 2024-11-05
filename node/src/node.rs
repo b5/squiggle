@@ -8,7 +8,6 @@ use crate::router::Router;
 use crate::vm::VM;
 
 pub struct Node {
-    path: PathBuf,
     router: Router,
     repo: Repo,
     vm: VM,
@@ -26,15 +25,10 @@ impl Node {
         let author = iroh::docs::Author::from_bytes(&secret_key.to_bytes());
         router.authors().import(author.clone()).await?;
 
-        let repo = Repo::open(&path).await?;
+        let repo = Repo::open(router.client().clone(), &path).await?;
         let vm = VM::new(router.client().clone(), &path).await?;
 
-        Ok(Node {
-            path,
-            router,
-            repo,
-            vm,
-        })
+        Ok(Node { router, repo, vm })
     }
 
     pub fn router(&self) -> &Router {

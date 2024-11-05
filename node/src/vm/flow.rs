@@ -702,8 +702,7 @@ mod tests {
         assert_eq!(
             task.result.status,
             JobResultStatus::Ok(JobOutput::Wasm {
-                stdout: "hello world\n".into(),
-                stderr: Default::default(),
+                output: "hello world\n".into(),
             })
         );
 

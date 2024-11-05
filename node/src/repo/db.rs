@@ -33,6 +33,8 @@ pub(crate) async fn setup_db(db: &DB) -> Result<()> {
             pubkey TEXT NOT NULL,
             created_at INTEGER NOT NULL,
             kind INTEGER NOT NULL,
+            schema TEXT NOT NULL,
+            data_id TEXT NOT NULL,
             content TEXT NOT NULL,
             tags TEXT NOT NULL,
             sig TEXT NOT NULL
@@ -54,7 +56,8 @@ pub(crate) async fn setup_db(db: &DB) -> Result<()> {
     conn.execute(
         "CREATE TABLE IF NOT EXISTS data (
             schema TEXT NOT NULL,
-            data_id TEXT PRIMARY KEY NOT NULL
+            id TEXT PRIMARY KEY NOT NULL,
+            data TEXT NOT NULL
     )",
         [],
     )?;

@@ -1161,6 +1161,7 @@ dependencies = [
  "axum",
  "bollard",
  "bytes",
+ "chrono",
  "config",
  "derive_more",
  "dirs 5.0.1",
@@ -1169,12 +1170,14 @@ dependencies = [
  "extism",
  "futures",
  "futures-buffered",
+ "hex",
  "iroh",
  "iroh-metrics",
  "rand",
  "rusqlite",
  "serde",
  "serde_json",
+ "sha2",
  "tempfile",
  "time",
  "tinytemplate",
@@ -2198,6 +2201,9 @@ name = "hex"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "hickory-proto"
@@ -4660,6 +4666,7 @@ dependencies = [
  "hashlink 0.9.1",
  "libsqlite3-sys",
  "smallvec",
+ "uuid",
 ]
 
 [[package]]
