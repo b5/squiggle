@@ -29,7 +29,7 @@ impl Repo {
     }
 
     pub fn users(&self) -> users::Users {
-        users::Users::new(self.db.clone())
+        users::Users::new(self.clone())
     }
 
     pub fn schemas(&self) -> schemas::Schemas {

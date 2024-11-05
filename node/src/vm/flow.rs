@@ -224,7 +224,7 @@ impl std::str::FromStr for Flow {
 pub struct Task {
     #[serde(default)]
     tasks: Vec<Task>,
-    description: JobDescription,
+    pub description: JobDescription,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]

@@ -158,7 +158,6 @@ impl Workspace {
 
     pub async fn run_job(&self, scope: Uuid, id: Uuid, jd: JobDescription) -> Result<Uuid> {
         let id = self.scheduler.run_job(scope, id, jd).await?;
-
         Ok(id)
     }
 

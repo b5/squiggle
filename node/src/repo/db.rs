@@ -36,7 +36,6 @@ pub(crate) async fn setup_db(db: &DB) -> Result<()> {
             schema TEXT NOT NULL,
             data_id TEXT NOT NULL,
             content TEXT NOT NULL,
-            tags TEXT NOT NULL,
             sig TEXT NOT NULL
         )",
         [],

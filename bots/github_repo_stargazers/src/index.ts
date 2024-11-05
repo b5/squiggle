@@ -20,6 +20,14 @@ export function main() {
     return -2;
   }
 
-  let body = JSON.stringify(res.body);
-  Host.outputString(body);
+
+  let body = JSON.parse(res.body);
+  const { event_create } = Host.getFunctions();
+
+  let schmea = Memory.fromString("7vtxfvpypm2ha7c5hpmy3t2e26glim256ebphxxfar6jqrzzwpya");;
+  let mem = Memory.fromJsonObject(body);
+  let offset = event_create(schmea.offset, mem.offset);
+  const event = Memory.find(offset).readJsonObject()
+  
+  Host.outputString(JSON.stringify(event));
 }

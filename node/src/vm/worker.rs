@@ -132,9 +132,17 @@ impl Worker {
     async fn execute_job(&self, job_id: Uuid, scheduled_job: ScheduledJob) -> Result<JobOutput> {
         info!("executing job {}", job_id);
 
+        let author = self
+            .repo
+            .router()
+            .authors()
+            .export(scheduled_job.author)
+            .await?
+            .ok_or_else(|| anyhow!("author not found: {}", scheduled_job.author))?;
+
         let job_ctx = JobContext {
+            author,
             id: job_id,
-            worker: self.author_id,
             name: scheduled_job.description.name.clone(),
             name_context: JobNameContext {
                 scope: scheduled_job.scope,

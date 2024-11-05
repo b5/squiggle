@@ -7,7 +7,8 @@ use anyhow::{bail, Context, Result};
 use bytes::Bytes;
 use iroh::{
     blobs::{util::SetTagOption, Hash},
-    docs::AuthorId,
+    docs::{Author, AuthorId},
+    net::key::PublicKey,
 };
 use serde::{Deserialize, Serialize};
 use tinytemplate::TinyTemplate;
@@ -126,6 +127,9 @@ pub enum JobType {
 pub struct JobDescription {
     /// Human-readable name of the job
     pub name: String,
+    /// the identifier of the user to run the job as.
+    /// Must have private half of key stored locally
+    pub author: String,
     /// Job details.
     pub details: JobDetails,
     #[serde(default)]
@@ -252,6 +256,7 @@ impl TryFrom<Bytes> for JobDescription {
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct ScheduledJob {
+    pub author: AuthorId,
     pub description: JobDescription,
     pub scope: Uuid,
     pub result: JobResult,
@@ -311,7 +316,7 @@ pub struct JobContext {
     /// Job name
     pub name: String,
     pub name_context: JobNameContext,
-    pub worker: AuthorId,
+    pub author: Author,
     pub artifacts: Artifacts,
 }
 
@@ -335,7 +340,7 @@ impl JobContext {
             "{}-{}-{}-{}",
             self.name_context.scope.as_simple(),
             self.name,
-            self.worker,
+            self.author,
             ctx,
         )
     }
@@ -473,7 +478,9 @@ mod tests {
 
     #[test]
     fn test_job_dependencies() {
+        let author_id = Author::new(&mut thread_rng()).id();
         let job = JobDescription {
+            author: author_id,
             name: "foo".into(),
             details: JobDetails::Docker {
                 image: "alpine:latest".into(),

@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use anyhow::{bail, Context, Result};
 use bytes::Bytes;
 use futures::StreamExt;
@@ -59,11 +61,14 @@ impl Scheduler {
         job_description: JobDescription,
     ) -> Result<Uuid> {
         info!(
-            "scheduling job: {} ({}) with scope {}",
-            job_description.name, id, scope
+            "scheduling job: {} ({}) with scope {} by {}",
+            job_description.name, id, scope, job_description.author
         );
 
+        let author = AuthorId::from_str(&job_description.author.as_str())?;
+
         let scheduled_job = ScheduledJob {
+            author,
             description: job_description,
             scope,
             result: JobResult::default(),

@@ -1,9 +1,12 @@
 use anyhow::Result;
+use derive_more::derive;
 use iroh::blobs::Hash;
+use iroh::docs::Author;
 use iroh::net::key::PublicKey;
 use rusqlite::params;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use sha2::{Digest, Sha256};
+use tracing::event;
 use std::fmt;
 use std::str::FromStr;
 use uuid::Uuid;
@@ -149,9 +152,9 @@ pub struct EventContent {
 }
 
 impl Event {
-    pub(crate) async fn mutate(
+    async fn mutate(
         db: &DB,
-        author: PublicKey,
+        author: Author,
         schema: Hash,
         id: Uuid,
         content: Hash,
@@ -161,23 +164,27 @@ impl Event {
             Tag(NOSTR_SCHEMA_TAG.to_string(), schema.to_string(), None),
             Tag(NOSTR_ID_TAG.to_string(), id.to_string(), None),
         ];
+        let id = nostr_id(
+            // TODO - remove this fuckery
+            PublicKey::from_bytes(author.public_key().as_bytes())?,
+            created_at,
+            EventKind::Mutate.kind(),
+            &tags,
+            &content,
+        )?;
+
+        let sig = author.sign(id.as_bytes());
         let event = Event {
-            id: nostr_id(
-                author,
-                created_at,
-                EventKind::Mutate.kind(),
-                &tags,
-                &content,
-            )?,
-            pubkey: author.to_string(),
+            id,
+            pubkey: author.id().to_string(),
             created_at,
             kind: EventKind::Mutate.kind(),
             tags,
-            sig: "".to_string(),
+            sig: hex::encode(sig.to_bytes()),
             content,
         };
 
-        event.write(&db).await?;
+        event.write(db).await?;
         Ok(event)
     }
 
@@ -205,15 +212,15 @@ impl Event {
         let schema = self.data_id()?;
         let data_id = self.data_id()?;
         conn.execute(
-            "INSERT INTO events (id, pubkey, created_at, kind, content, schema, data_id, sig) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            "INSERT INTO events (id, pubkey, created_at, kind, schema, data_id, content, sig) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             params![
                 self.id.to_string(),
                 self.pubkey,
                 self.created_at,
                 self.kind,
-                self.content.to_string(),
                 schema,
                 data_id, 
+                self.content.to_string(),
                 self.sig
             ],
         )?;
@@ -230,7 +237,7 @@ impl Events {
 
     pub async fn create(
         &self,
-        author: PublicKey,
+        author: Author,
         schema: Hash,
         data: impl Serialize,
     ) -> Result<Event> {
@@ -240,7 +247,7 @@ impl Events {
 
     pub async fn mutate(
         &self,
-        author: PublicKey,
+        author: Author,
         schema: Hash,
         id: Uuid,
         data: impl Serialize,

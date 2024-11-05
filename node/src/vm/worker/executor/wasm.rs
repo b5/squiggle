@@ -1,8 +1,14 @@
 use std::path::PathBuf;
+use std::str::FromStr;
 
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Ok, Result};
+use bollard::auth;
 use extism::*;
+use iroh::blobs::Hash;
+use iroh::docs::Author;
+use iroh::net::key::PublicKey;
 use tracing::debug;
+use uuid::Uuid;
 
 use crate::repo::Repo;
 use crate::vm::blobs::Blobs;
@@ -37,7 +43,7 @@ impl Executor for WasmExecutor {
         tokio::fs::create_dir_all(&downloads_path).await?;
         tokio::fs::create_dir_all(&uploads_path).await?;
 
-        debug!("downloading artifacts to {}", downloads_path.display());
+        println!("downloading artifacts to {}", downloads_path.display());
         ctx.write_downloads(&downloads_path, &self.blobs, self.repo.router())
             .await
             .context("write downloads")?;
@@ -49,18 +55,35 @@ impl Executor for WasmExecutor {
             ("uploads".to_string(), uploads_path.clone()),
         ]
         .into_iter();
-        let manifest = Manifest::new([path])
-            .with_allowed_host("*")
-            .with_allowed_paths(paths);
+        let manifest = Manifest::new([path]).with_allowed_host("*");
+        // .with_allowed_paths(paths);
+
         let wasm_context = UserData::new(WasmContext {
+            author: ctx.author.clone(),
+            rt: tokio::runtime::Handle::current(),
             repo: self.repo.clone(),
         });
-        let builder = PluginBuilder::new(manifest).with_wasi(true);
-        let mut plugin = add_host_functions(builder, wasm_context).build()?;
+        let mut plugin = PluginBuilder::new(manifest)
+            .with_wasi(true)
+            .with_function(
+                "event_create",
+                [PTR, PTR],
+                [PTR],
+                wasm_context.clone(),
+                event_create,
+            )
+            .with_function(
+                "event_mutate",
+                [PTR, PTR, PTR],
+                [PTR],
+                wasm_context,
+                event_mutate,
+            )
+            .build()?;
 
         let output = plugin.call::<&str, &str>("main", "hello")?;
 
-        debug!("uploading artifacts from {}", uploads_path.display());
+        println!("uploading artifacts from {}", uploads_path.display());
         ctx.read_uploads(&uploads_path, &self.blobs, self.repo.router())
             .await
             .context("read uploads")?;
@@ -83,56 +106,94 @@ pub struct Report {
 }
 
 struct WasmContext {
-    // TODO - use passed-in author
+    rt: tokio::runtime::Handle,
+    author: Author,
     repo: Repo,
 }
 
-// host_fn!(mutate(ctx: WasmContext; schema: &str, id: &str, data: &str) -> Vec<u8> {
-//     let ctx = ctx.get()?;
-//     let ctx = ctx.lock().unwrap();
+host_fn!(event_create(ctx: WasmContext; schema: String, data: String) -> Vec<u8> {
+    let ctx = ctx.get()?;
+    let ctx = ctx.lock().unwrap();
 
-//     let author = ctx.repo.router().authors().default().await?;
-//     let event = ctx.repo.events().mutate(author, schema, id, data).await?;
+    let schema = Hash::from_str(schema.as_str()).map_err(|_| anyhow!("invalid schema hash"))?;
+    let author = ctx.author.clone();
+    let events = ctx.repo.events();
+
+    let e = tokio::task::block_in_place(|| {
+        ctx.rt.block_on(async move {
+            let event = events.create(author, schema, data).await.unwrap();
+            let data = serde_json::to_vec(&event).map_err(|e| anyhow!("failed to serialize event: {}", e)).unwrap();
+            println!("event_create! {:?}", event);
+            data
+        })
+    });
+
+    Ok(e)
+});
+
+host_fn!(event_mutate(ctx: WasmContext; schema: String, id: String, data: String) -> Vec<u8> {
+    let ctx = ctx.get()?;
+    let ctx = ctx.lock().unwrap();
+
+
+    let schema = Hash::from_str(schema.as_str()).map_err(|_| anyhow!("invalid schema hash"))?;
+    let id = Uuid::parse_str(id.clone().as_str()).map_err(|_| anyhow!("invalid id"))?;
+    let author = ctx.author.clone();
+    let events = ctx.repo.events();
+
+    let res = ctx.rt.block_on(async move {
+        let event = events.mutate(author, schema, id, data).await?;
+        let data = serde_json::to_vec(&event).map_err(|e| anyhow!("failed to serialize event: {}", e))?;
+        println!("mutate! {:?}", schema);
+        data.to_bytes()
+    })?;
+
+    Ok(res)
+});
+
+// host_fn!(iroh_blob_get_ticket(_user_data: WasmContext; _ticket: &str) -> Vec<u8> {
+//     // let ctx = user_data.get()?;
+//     // let ctx = ctx.lock().unwrap();
+
+//     // let (node_addr, hash, format) = iroh::base::ticket::BlobTicket::from_str(ticket).map_err(|_| anyhow!("invalid ticket"))?.into_parts();
+
+//     // if format != iroh::blobs::BlobFormat::Raw {
+//     //     return Err(anyhow!("can only get raw bytes for now, not HashSequences (collections)"));
+//     // }
+//     // let client = ctx.iroh.client();
+//     // let buf = ctx.rt.block_on(async move {
+//     //     let mut stream = client.blobs().download_with_opts(hash, iroh::client::blobs::DownloadOptions {
+//     //         format,
+//     //         nodes: vec![node_addr],
+//     //         mode: iroh::client::blobs::DownloadMode::Queued,
+//     //         tag: SetTagOption::Auto,
+//     //     }).await?;
+//     //     while stream.next().await.is_some() {}
+
+//     //     let buffer = client.blobs().read(hash).await?.read_to_bytes().await?;
+//     //     anyhow::Ok(buffer.to_vec())
+//     // })?;
+
+//     // Ok(buf)
 //     Ok(vec![])
 // });
-
-host_fn!(iroh_blob_get_ticket(_user_data: WasmContext; _ticket: &str) -> Vec<u8> {
-    // let ctx = user_data.get()?;
-    // let ctx = ctx.lock().unwrap();
-
-    // let (node_addr, hash, format) = iroh::base::ticket::BlobTicket::from_str(ticket).map_err(|_| anyhow!("invalid ticket"))?.into_parts();
-
-    // if format != iroh::blobs::BlobFormat::Raw {
-    //     return Err(anyhow!("can only get raw bytes for now, not HashSequences (collections)"));
-    // }
-    // let client = ctx.iroh.client();
-    // let buf = ctx.rt.block_on(async move {
-    //     let mut stream = client.blobs().download_with_opts(hash, iroh::client::blobs::DownloadOptions {
-    //         format,
-    //         nodes: vec![node_addr],
-    //         mode: iroh::client::blobs::DownloadMode::Queued,
-    //         tag: SetTagOption::Auto,
-    //     }).await?;
-    //     while stream.next().await.is_some() {}
-
-    //     let buffer = client.blobs().read(hash).await?.read_to_bytes().await?;
-    //     anyhow::Ok(buffer.to_vec())
-    // })?;
-
-    // Ok(buf)
-    Ok(vec![])
-});
 
 fn add_host_functions(
     builder: PluginBuilder,
     wasm_context: UserData<WasmContext>,
 ) -> PluginBuilder {
     builder.with_function(
-        "iroh_blob_get_ticket",
-        [PTR],
+        "event_mutate",
+        [PTR, PTR],
         [PTR],
         wasm_context,
-        iroh_blob_get_ticket,
+        event_mutate,
     )
-    // .with_function("mutate", [PTR, PTR], [PTR], wasm_context, mutate)
+    // .with_function(
+    //     "iroh_blob_get_ticket",
+    //     [PTR],
+    //     [PTR],
+    //     wasm_context,
+    //     iroh_blob_get_ticket,
+    // )
 }
