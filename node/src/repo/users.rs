@@ -1,7 +1,7 @@
 use anyhow::Result;
 use ed25519_dalek::{SigningKey, VerifyingKey};
 use futures::StreamExt;
-use iroh::docs::{Author, AuthorId};
+use iroh::docs::AuthorId;
 use rand::prelude::SliceRandom;
 use rand::rngs::OsRng;
 use rusqlite::params;

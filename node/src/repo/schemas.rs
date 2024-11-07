@@ -51,4 +51,11 @@ impl Schemas {
         // schema.write(&self.db).await
         schema.id()
     }
+
+    pub async fn list(&self, _offset: u64, _limit: u64) -> Result<Vec<Schema>> {
+        Ok(vec![
+            Schema::new("schema1".to_string()),
+            Schema::new("schema2".to_string()),
+        ])
+    }
 }

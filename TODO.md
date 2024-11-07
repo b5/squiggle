@@ -1,22 +1,20 @@
-
 * [x] Sqlite Events Table
 * [x] VM Compiles 
 * [x] list accounts on frontend
-* [ ] Automation 1
+* [x] Automation 1
   * [x] Hello-world WASM Execution
   * [x] Tasks & Jobs
   * [x] Wire up job kickoff to the frontend
   * [x] interface to write blobs (re-using fog uploads dir)
-  * [ ] write a task that creates one or more blobs
+  * [x] write a task that creates one or more blobs
 * App Detour 1:
   * [ ] build out project scores database:
-    * [ ] encode existing notion table as jsonschema:
-      * can we just use notion's schema for this?
-      * let's start with some simple illustration that adheres to jsonschema
-    * [ ] add schema as a collection: 1th blob is schema, prior schemas are 2-Nth blobs
-    * [ ] add a single event for every entry
+    * [x] add a single event for every entry
+  * [ ] app-side schema viewer
 * [ ] Events 1
-  * [ ] Jobs are associated with accounts
+  * [x] Jobs are associated with accounts
+  * [ ] bots schema
+  * [ ] jobs schema
   * [ ] create event on job run
   * [ ] interface to write events
   * [ ] written from a job get a collection
@@ -27,6 +25,11 @@
     * [ ] Github User Data Example
     * [ ] Twitter User Data Example
   * [ ] Reduce function that constructs account context?
+* [ ] App Detour 2
+  * [ ] encode existing notion table as jsonschema:
+      * can we just use notion's schema for this?
+      * let's start with some simple illustration that adheres to jsonschema
+      * [ ] add schema as a collection: 1th blob is schema, prior schemas are 2-Nth blobs
 * [ ] Sync 1
   * Connect & Sync All events
 * [ ] Search Index

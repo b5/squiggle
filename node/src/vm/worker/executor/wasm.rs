@@ -2,11 +2,9 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use anyhow::{anyhow, Context, Ok, Result};
-use bollard::auth;
 use extism::*;
 use iroh::blobs::Hash;
 use iroh::docs::Author;
-use iroh::net::key::PublicKey;
 use tracing::debug;
 use uuid::Uuid;
 
@@ -87,7 +85,7 @@ impl Executor for WasmExecutor {
 
         let output = plugin.call::<&str, &str>("main", "hello")?;
 
-        println!("uploading artifacts from {}", uploads_path.display());
+        debug!("uploading artifacts from {}", uploads_path.display());
         ctx.read_uploads(&uploads_path, &self.blobs, self.repo.router())
             .await
             .context("read uploads")?;
