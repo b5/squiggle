@@ -64,9 +64,11 @@ impl Executor for WasmExecutor {
             author: ctx.author.clone(),
             rt: tokio::runtime::Handle::current(),
             repo: self.repo.clone(),
+            output: String::new(),
         });
         let mut plugin = PluginBuilder::new(manifest)
             .with_wasi(true)
+            .with_function("print", [PTR], [], wasm_context.clone(), print)
             .with_function(
                 "event_create",
                 [PTR, PTR],
@@ -78,9 +80,10 @@ impl Executor for WasmExecutor {
                 "event_mutate",
                 [PTR, PTR, PTR],
                 [PTR],
-                wasm_context,
+                wasm_context.clone(),
                 event_mutate,
             )
+            .with_function("event_query", [PTR, PTR], [PTR], wasm_context, event_query)
             .build()?;
 
         let output = plugin.call::<&str, &str>("main", "hello")?;
@@ -111,7 +114,16 @@ struct WasmContext {
     rt: tokio::runtime::Handle,
     author: Author,
     repo: Repo,
+    output: String,
 }
+
+host_fn!(print(ctx: WasmContext; msg: String) -> () {
+    let ctx = ctx.get()?;
+    let mut ctx = ctx.lock().unwrap();
+    ctx.output = ctx.output.to_owned() + &msg;
+    println!("{}", msg);
+    Ok(())
+});
 
 host_fn!(event_create(ctx: WasmContext; schema: String, data: String) -> Vec<u8> {
     let ctx = ctx.get()?;
@@ -125,7 +137,6 @@ host_fn!(event_create(ctx: WasmContext; schema: String, data: String) -> Vec<u8>
         ctx.rt.block_on(async move {
             let event = events.create(author, schema, data).await.unwrap();
             let data = serde_json::to_vec(&event).map_err(|e| anyhow!("failed to serialize event: {}", e)).unwrap();
-            println!("event_create! {:?}", event);
             data
         })
     });
@@ -143,11 +154,31 @@ host_fn!(event_mutate(ctx: WasmContext; schema: String, id: String, data: String
     let author = ctx.author.clone();
     let events = ctx.repo.events();
 
-    let res = ctx.rt.block_on(async move {
-        let event = events.mutate(author, schema, id, data).await?;
-        let data = serde_json::to_vec(&event).map_err(|e| anyhow!("failed to serialize event: {}", e))?;
-        println!("mutate! {:?}", schema);
-        data.to_bytes()
+    let res = tokio::task::block_in_place(|| {
+        ctx.rt.block_on(async move {
+            let event = events.mutate(author, schema, id, data).await?;
+            let data = serde_json::to_vec(&event).map_err(|e| anyhow!("failed to serialize event: {}", e))?;
+            println!("mutate! {:?}", schema);
+            data.to_bytes()
+        })
+    })?;
+
+    Ok(res)
+});
+
+host_fn!(event_query(ctx: WasmContext; schema: String, query: String) -> Vec<u8> {
+    let ctx = ctx.get()?;
+    let ctx = ctx.lock().unwrap();
+
+    let schema = Hash::from_str(schema.as_str()).map_err(|_| anyhow!("invalid schema hash"))?;
+    let events = ctx.repo.events().clone();
+
+    let res = tokio::task::block_in_place(|| {
+        ctx.rt.block_on(async move {
+            let res = events.query(schema, query).await?;
+            let data = serde_json::to_vec(&res).map_err(|e| anyhow!("failed to serialize events: {}", e))?;
+            data.to_bytes()
+        })
     })?;
 
     Ok(res)
@@ -179,23 +210,3 @@ host_fn!(event_mutate(ctx: WasmContext; schema: String, id: String, data: String
 //     // Ok(buf)
 //     Ok(vec![])
 // });
-
-fn add_host_functions(
-    builder: PluginBuilder,
-    wasm_context: UserData<WasmContext>,
-) -> PluginBuilder {
-    builder.with_function(
-        "event_mutate",
-        [PTR, PTR],
-        [PTR],
-        wasm_context,
-        event_mutate,
-    )
-    // .with_function(
-    //     "iroh_blob_get_ticket",
-    //     [PTR],
-    //     [PTR],
-    //     wasm_context,
-    //     iroh_blob_get_ticket,
-    // )
-}

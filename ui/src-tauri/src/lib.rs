@@ -6,18 +6,6 @@ use datalayer_node::repo::schemas::Schema;
 use datalayer_node::vm::flow::{Flow, FlowOutput};
 
 #[tauri::command]
-async fn run_flow(node: tauri::State<'_, Arc<Node>>, path: &str) -> Result<FlowOutput, String> {
-    println!("Current working directory: {:?} running flow: {:?}", std::env::current_dir().unwrap(), path);
-    let flow = Flow::load(path).await.map_err(|e| e.to_string())?;
-    let output = node
-        .vm()
-        .run("default", flow)
-        .await
-        .map_err(|e| e.to_string())?;
-  Ok(output)
-}
-
-#[tauri::command]
 async fn accounts_list(
     node: tauri::State<'_, Arc<Node>>,
 ) -> Result<Vec<User>, String> {
@@ -29,6 +17,18 @@ async fn accounts_list(
 async fn schemas_list(node: tauri::State<'_, Arc<Node>>) -> Result<Vec<Schema>, String> {
     let schemas = node.repo().schemas().list(0, 1000).await.map_err(|e| e.to_string())?;
     Ok(schemas)
+}
+
+#[tauri::command]
+async fn run_flow(node: tauri::State<'_, Arc<Node>>, path: &str) -> Result<FlowOutput, String> {
+    println!("Current working directory: {:?} running flow: {:?}", std::env::current_dir().unwrap(), path);
+    let flow = Flow::load(path).await.map_err(|e| e.to_string())?;
+    let output = node
+        .vm()
+        .run("default", flow)
+        .await
+        .map_err(|e| e.to_string())?;
+  Ok(output)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]

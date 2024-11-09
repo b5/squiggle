@@ -1,3 +1,4 @@
+import { log, query, addEntry } from "./library";
 
 export function meta() {
   const data = {
@@ -9,8 +10,9 @@ export function meta() {
 }
 
 export function main() {
-  const { event_create } = Host.getFunctions();
-
+  const schema = "7vtxfvpypm2ha7c5hpmy3t2e26glim256ebphxxfar6jqrzzwpya";
+  log("sup");
+  
   const phasers = Config.get("phasers")
   if (!phasers) {
     return -1;
@@ -26,11 +28,11 @@ export function main() {
   }
 
   let body = JSON.parse(res.body);
+  const added = addEntry(schema, body);
+  log(JSON.stringify(added));
 
-  let schema = Memory.fromString("7vtxfvpypm2ha7c5hpmy3t2e26glim256ebphxxfar6jqrzzwpya");;
-  let mem = Memory.fromJsonObject(body);
-  let offset = event_create(schema.offset, mem.offset);
-  const event = Memory.find(offset).readJsonObject()
-  
-  Host.outputString(JSON.stringify(body));
+  let result = query(schema, "hello");
+  log(JSON.stringify(result));
+
+  log("done");
 }

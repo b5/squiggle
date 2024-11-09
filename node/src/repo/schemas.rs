@@ -44,7 +44,7 @@ impl Schemas {
         schema.id()
     }
 
-    pub async fn update(&self, id: Hash, data: &str) -> Result<Hash> {
+    pub async fn update(&self, _id: Hash, data: &str) -> Result<Hash> {
         let schema = Schema::new(data.to_string());
         // TODO - should construct a HashSeq, place the new schema as the 1th element
         // and update the metadata in 0th element

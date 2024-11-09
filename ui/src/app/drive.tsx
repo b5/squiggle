@@ -7,8 +7,6 @@ export function Component() {
     return <div>Loading...</div>
   }
 
-  console.log(data)
-
   return (
     <div className="p-4">
       <p>Huh?</p>

@@ -1,4 +1,5 @@
-use anyhow::Result;
+use anyhow::{anyhow, Result};
+use bytes::Bytes;
 use iroh::blobs::Hash;
 use iroh::docs::Author;
 use iroh::net::key::PublicKey;
@@ -128,6 +129,18 @@ fn nostr_id(
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub enum HashOrContent {
+    Hash(Hash),
+    Content(Bytes),
+}
+
+impl From<Hash> for HashOrContent {
+    fn from(hash: Hash) -> Self {
+        HashOrContent::Hash(hash)
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Event {
     pub id: Sha256Digest,
     pub pubkey: String,
@@ -136,18 +149,11 @@ pub struct Event {
     pub kind: u32,
     pub tags: Vec<Tag>,
     pub sig: String,
-    pub content: Hash,
+    pub content: HashOrContent,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Tag(String, String, Option<String>);
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct EventContent {
-    pub schema: Hash, // Pointer to hashseq of schema this event is for
-    pub data_id: Uuid,
-    pub value: Option<Hash>, // Pointer to hash of data, will not be present if event is a delete
-}
 
 impl Event {
     async fn mutate(
@@ -179,14 +185,14 @@ impl Event {
             kind: EventKind::Mutate.kind(),
             tags,
             sig: hex::encode(sig.to_bytes()),
-            content,
+            content: content.into(),
         };
 
         event.write(db).await?;
         Ok(event)
     }
 
-    fn schema(&self) -> Result<Hash> {
+    fn schema_hash(&self) -> Result<Hash> {
         let schema_tag = self
             .tags
             .iter()
@@ -207,8 +213,12 @@ impl Event {
 
     async fn write(&self, db: &DB) -> Result<()> {
         let conn = db.lock().await;
-        let schema = self.data_id()?;
+        let schema = self.schema_hash()?.to_string();
         let data_id = self.data_id()?;
+        let content_hash = match self.content {
+            HashOrContent::Hash(ref hash) => hash,
+            HashOrContent::Content(_) => panic!("expected hash, not content"),
+        };
         conn.execute(
             "INSERT INTO events (id, pubkey, created_at, kind, schema, data_id, content, sig) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             params![
@@ -218,14 +228,37 @@ impl Event {
                 self.kind,
                 schema,
                 data_id, 
-                self.content.to_string(),
+                content_hash.to_string(),
                 self.sig
             ],
         )?;
         Ok(())
     }
+
+    fn from_sql_row(row: &rusqlite::Row) -> Result<Self> {
+        println!("row: {:?}", row);
+        // (0   1       2           3     4       5        6       7)
+        // (id, pubkey, created_at, kind, schema, data_id, content, sig)
+        let id: String = row.get(0)?;
+        let content: String = row.get(6)?;
+        let data_id: Uuid = row.get(5)?;
+        println!("id: {:?} content: {:?}", &id, &content);
+        Ok(Self {
+            id: Sha256Digest::from_str(&id).map_err(|e| anyhow!(e))?,
+            pubkey: row.get(1)?,
+            created_at: row.get(2)?,
+            kind: row.get(3)?,
+            tags: vec![
+                Tag(NOSTR_SCHEMA_TAG.to_string(), row.get(4)?, None),
+                Tag(NOSTR_ID_TAG.to_string(), data_id.to_string(), None),
+            ],
+            content: Hash::from_str(&content)?.into(),
+            sig: row.get(6)?,
+        })
+    }
 }
 
+#[derive(Clone)]
 pub struct Events(Repo);
 
 impl Events {
@@ -256,5 +289,30 @@ impl Events {
         let content = outcome.hash;
         Event::mutate(&self.0.db, author, schema, id, content).await
         // TODO - write to data table
+    }
+
+    pub async fn query(
+        &self,
+        schema: Hash,
+        query: String
+    ) -> Result<Vec<Event>> {
+        let conn = self.0.db.lock().await;
+        let mut stmt = conn.prepare("SELECT id, pubkey, created_at, kind, schema, data_id, content, sig FROM events WHERE schema = ?1")?;
+        let mut rows = stmt.query(params![schema.to_string()])?;
+        let mut events = Vec::new();
+        
+
+        while let Some(row) = rows.next()? {
+            let mut event = Event::from_sql_row(row)?;
+            let content_hash = match event.content {
+                HashOrContent::Hash(hash) => hash,
+                HashOrContent::Content(_) => panic!("must be a hash")
+            };
+            let content = self.0.router.blobs().read_to_bytes(content_hash).await?;
+            event.content = HashOrContent::Content(content);
+            events.push(event);
+        }
+        println!("events: {:?}", &events);
+        Ok(events)
     }
 }
