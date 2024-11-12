@@ -8,10 +8,14 @@ use iroh::docs::Author;
 use tracing::debug;
 use uuid::Uuid;
 
+use crate::repo::capabilities::Capability;
+use crate::repo::schemas::Schema;
 use crate::repo::Repo;
 use crate::vm::blobs::Blobs;
 
 use super::Executor;
+
+const MAIN_FUNC_NAME: &str = "main";
 
 #[derive(derive_more::Debug, Clone)]
 pub struct WasmExecutor {
@@ -47,18 +51,11 @@ impl Executor for WasmExecutor {
             .context("write downloads")?;
 
         let path = Wasm::file(downloads_path.join(&job.module));
-
-        // let paths = vec![
-        //     ("downloads".to_string(), downloads_path.clone()),
-        //     ("uploads".to_string(), uploads_path.clone()),
-        // ]
-        // .into_iter();
         let env = ctx.environment.clone().into_iter();
 
         let manifest = Manifest::new([path])
             .with_allowed_host("*")
             .with_config(env);
-        // .with_allowed_paths(paths);
 
         let wasm_context = UserData::new(WasmContext {
             author: ctx.author.clone(),
@@ -69,6 +66,14 @@ impl Executor for WasmExecutor {
         let mut plugin = PluginBuilder::new(manifest)
             .with_wasi(true)
             .with_function("print", [PTR], [], wasm_context.clone(), print)
+            .with_function("sleep", [ValType::I64], [], wasm_context.clone(), sleep)
+            .with_function(
+                "schema_load_or_create",
+                [PTR],
+                [PTR],
+                wasm_context.clone(),
+                schema_load_or_create,
+            )
             .with_function(
                 "event_create",
                 [PTR, PTR],
@@ -86,7 +91,7 @@ impl Executor for WasmExecutor {
             .with_function("event_query", [PTR, PTR], [PTR], wasm_context, event_query)
             .build()?;
 
-        let output = plugin.call::<&str, &str>("main", "hello")?;
+        let output = plugin.call::<_, &str>(MAIN_FUNC_NAME, ())?;
 
         debug!("uploading artifacts from {}", uploads_path.display());
         ctx.read_uploads(&uploads_path, &self.blobs, self.repo.router())
@@ -125,23 +130,48 @@ host_fn!(print(ctx: WasmContext; msg: String) -> () {
     Ok(())
 });
 
+host_fn!(sleep(ctx: WasmContext; ms: u64) -> () {
+    let ctx = ctx.get()?;
+    let ctx = ctx.lock().unwrap();
+    ctx.rt.block_on(tokio::time::sleep(std::time::Duration::from_millis(ms)));
+    Ok(())
+});
+
+host_fn!(schema_load_or_create(ctx: WasmContext; data: String) -> Vec<u8> {
+    let ctx = ctx.get()?;
+    let ctx = ctx.lock().unwrap();
+    let schemas = ctx.repo.schemas();
+
+    tokio::task::block_in_place(|| {
+        ctx.rt.block_on(async move {
+            let schema = schemas.load_or_create(data.into()).await.context("failed to load or create schema")?;
+            serde_json::to_vec(&schema).context("failed to serialize schema")
+        })
+    })
+});
+
 host_fn!(event_create(ctx: WasmContext; schema: String, data: String) -> Vec<u8> {
     let ctx = ctx.get()?;
     let ctx = ctx.lock().unwrap();
 
-    let schema = Hash::from_str(schema.as_str()).map_err(|_| anyhow!("invalid schema hash"))?;
+    let schema_hash = Hash::from_str(schema.as_str()).context("invalid schema hash")?;
     let author = ctx.author.clone();
     let events = ctx.repo.events();
+    let schemas = ctx.repo.schemas();
 
-    let e = tokio::task::block_in_place(|| {
+    tokio::task::block_in_place(|| {
         ctx.rt.block_on(async move {
-            let event = events.create(author, schema, data).await.unwrap();
-            let data = serde_json::to_vec(&event).map_err(|e| anyhow!("failed to serialize event: {}", e)).unwrap();
-            data
-        })
-    });
+            let schema = schemas.load(schema_hash).await.context("loading schema")?;
+            let validator = schema.validator().context("getting validator")?;
+            let parsed = serde_json::from_str::<serde_json::Value>(&data).context("parsing JSON")?;
+            if let Err(e) = validator.validate(&parsed) {
+                return Err(anyhow!("validation error: {}", e.to_string()));
+            };
 
-    Ok(e)
+            let event = events.create(author, schema.hash, data).await.context("failed to created event")?;
+            serde_json::to_vec(&event).context("failed to serialize event")
+        })
+    })
 });
 
 host_fn!(event_mutate(ctx: WasmContext; schema: String, id: String, data: String) -> Vec<u8> {
@@ -154,16 +184,13 @@ host_fn!(event_mutate(ctx: WasmContext; schema: String, id: String, data: String
     let author = ctx.author.clone();
     let events = ctx.repo.events();
 
-    let res = tokio::task::block_in_place(|| {
+    tokio::task::block_in_place(|| {
         ctx.rt.block_on(async move {
             let event = events.mutate(author, schema, id, data).await?;
             let data = serde_json::to_vec(&event).map_err(|e| anyhow!("failed to serialize event: {}", e))?;
-            println!("mutate! {:?}", schema);
             data.to_bytes()
         })
-    })?;
-
-    Ok(res)
+    })
 });
 
 host_fn!(event_query(ctx: WasmContext; schema: String, query: String) -> Vec<u8> {
@@ -173,15 +200,13 @@ host_fn!(event_query(ctx: WasmContext; schema: String, query: String) -> Vec<u8>
     let schema = Hash::from_str(schema.as_str()).map_err(|_| anyhow!("invalid schema hash"))?;
     let events = ctx.repo.events().clone();
 
-    let res = tokio::task::block_in_place(|| {
+    tokio::task::block_in_place(|| {
         ctx.rt.block_on(async move {
             let res = events.query(schema, query).await?;
             let data = serde_json::to_vec(&res).map_err(|e| anyhow!("failed to serialize events: {}", e))?;
             data.to_bytes()
         })
-    })?;
-
-    Ok(res)
+    })
 });
 
 // host_fn!(iroh_blob_get_ticket(_user_data: WasmContext; _ticket: &str) -> Vec<u8> {

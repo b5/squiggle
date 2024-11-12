@@ -5,6 +5,7 @@ use anyhow::Result;
 use self::db::{open_db, setup_db, DB};
 use crate::router::RouterClient;
 
+pub mod capabilities;
 mod db;
 pub mod events;
 pub mod schemas;

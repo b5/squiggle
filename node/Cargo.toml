@@ -21,6 +21,7 @@ futures-buffered = "0.2.9"
 hex = { version = "0.4.3", features = ["serde"] }
 iroh = "0.27.0"
 iroh-metrics = "0.27.0"
+jsonschema = { version = "0.26.1", default-features = false }
 rand = "0.8.5"
 rusqlite = { version = "0.32.1", features = ["uuid"] }
 serde = { version = "1.0.214", features = ["derive"] }

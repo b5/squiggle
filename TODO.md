@@ -1,3 +1,33 @@
+Purpose: Airtable Clone for Laptop-Scale Data
+  * Local 
+
+High Level Requirements:
+* keep large amounts of disparate data synced from external sources
+* means of scoping data based on facets of a user's identity
+* connect facets with others
+* permit access to data with others
+* sync that shared data with others
+
+--
+
+* [ ] Mon Nov 11 - Schema Validate, Write, Create
+* [ ] Tue Nov 12 - Table Display Speedrun
+* [ ] Wed Nov 13 - Simplified Search
+* [ ] Thu Nov 14 - Ticket-Based Share flow
+* [ ] Fri Nov 15 - Demo for team
+
+--
+Initial MVP Flow:
+* [ ] List available bots
+* [ ] Enable bot
+* [ ] Display Run Status
+* [ ] Review Local Data
+* [ ] Search Local Data
+-- --
+* [ ] Connect with Friends
+* [ ] One-off sharing
+
+-- --
 * [x] Sqlite Events Table
 * [x] VM Compiles 
 * [x] list accounts on frontend
@@ -11,6 +41,7 @@
   * [ ] build out project scores database:
     * [x] add a single event for every entry
   * [ ] app-side schema viewer
+* [ ] Schemas are JSON Schemas
 * [ ] Events 1
   * [x] Jobs are associated with accounts
   * [ ] bots schema
@@ -43,4 +74,6 @@
 * [ ] Access Control 1
   * [ ] 
 * [ ] Blob Persistence
-* [ ] Secrets for Bots
+* [x] Pass config to bots
+* [ ] Store Secrets for bots
+* [ ] set up some sort of auto-update for tauri UI

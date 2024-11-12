@@ -17,9 +17,7 @@ async fn main() -> Result<()> {
     //         String::from(""),
     //     )
     //     .await?;
-    println!("Current working directory: {:?}", std::env::current_dir()?);
     let authors = node.repo().users().authors().await?;
-    print!("Authors: {:?}", &authors[0].to_string());
 
     let mut flow =
         datalayer_node::vm::flow::Flow::load("../bots/github_repo_stargazers/stargazers.toml")

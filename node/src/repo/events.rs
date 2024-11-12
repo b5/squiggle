@@ -110,7 +110,7 @@ impl FromStr for Sha256Digest {
     }
 }
 
-fn nostr_id(
+pub(crate) fn nostr_id(
     pubkey: PublicKey,
     created_at: i64,
     kind: u32,
@@ -211,13 +211,13 @@ impl Event {
         Uuid::parse_str(&id_tag.1).map_err(|e| anyhow::anyhow!(e))
     }
 
-    async fn write(&self, db: &DB) -> Result<()> {
+    pub(crate) async fn write(&self, db: &DB) -> Result<()> {
         let conn = db.lock().await;
         let schema = self.schema_hash()?.to_string();
         let data_id = self.data_id()?;
-        let content_hash = match self.content {
-            HashOrContent::Hash(ref hash) => hash,
-            HashOrContent::Content(_) => panic!("expected hash, not content"),
+        let content = match self.content {
+            HashOrContent::Hash(ref hash) => hash.to_string(),
+            HashOrContent::Content(ref data) => String::from_utf8(data.to_vec())?,
         };
         conn.execute(
             "INSERT INTO events (id, pubkey, created_at, kind, schema, data_id, content, sig) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
@@ -228,7 +228,7 @@ impl Event {
                 self.kind,
                 schema,
                 data_id, 
-                content_hash.to_string(),
+                content,
                 self.sig
             ],
         )?;

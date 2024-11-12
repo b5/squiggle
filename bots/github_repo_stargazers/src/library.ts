@@ -1,4 +1,4 @@
-const { print, event_create, event_mutate, event_query } = Host.getFunctions();
+const { print, sleep: timeout, event_create, event_mutate, event_query, schema_load_or_create } = Host.getFunctions();
 
 export function log(s: string) {
   const mem = Memory.fromString(s);
@@ -6,8 +6,25 @@ export function log(s: string) {
   mem.free();
 }
 
-export function query(schema: string, query: string): Entry[] {
-  const s = Memory.fromString(schema);
+export function sleep(milliseconds: number) {
+  timeout(milliseconds);
+}
+
+export interface Schema {
+  title: string;
+  hash: string;
+  data: any;
+}
+
+export function loadOrCreateSchema(schema: any): Schema {
+  const s = Memory.fromJsonObject(schema);
+  let offset = schema_load_or_create(s.offset);
+  s.free();
+  return Memory.find(offset).readJsonObject();
+}
+
+export function query(schema: Schema, query: string): Entry[] {
+  const s = Memory.fromString(schema.hash);
   const q = Memory.fromString(query);
   const offset = event_query(s.offset, q.offset);
   s.free();
@@ -21,8 +38,8 @@ export interface Entry {
   data: any;
 }
 
-export function addEntry(schema: string, entry: any): Entry {
-  const s = Memory.fromString(schema);
+export function addEntry(schema: Schema, entry: any): Entry {
+  const s = Memory.fromString(schema.hash);
   const d = Memory.fromJsonObject(entry);
   const offset = event_create(s.offset, d.offset);
   s.free();
@@ -30,8 +47,8 @@ export function addEntry(schema: string, entry: any): Entry {
   return Memory.find(offset).readJsonObject();
 }
 
-export function updateEntry(schema: string, id: string, entry: any): Entry {
-  const s = Memory.fromString(schema);
+export function updateEntry(schema: Schema, id: string, entry: any): Entry {
+  const s = Memory.fromString(schema.hash);
   const i = Memory.fromString(id);
   const d = Memory.fromJsonObject(entry);
   const offset = event_mutate(s.offset, i.offset, d.offset);

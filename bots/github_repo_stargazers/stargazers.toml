@@ -11,7 +11,7 @@ path = "../bots/github_repo_stargazers/dist/plugin.wasm"
 [tasks.description]
 name = "run"
 author = "ctdsv6inb4vkfeuoqvd5g377yjbtbeqwwcprbm4xqmbuddczgszq"
-environment = { "phasers" = "stun" }
+environment = { "org" = "n0-computer", "repo" = "awesome-iroh", "github_token" = "" }
 
 [[tasks.description.artifacts.downloads]]
 path = "github_repo_stargazers.wasm"
