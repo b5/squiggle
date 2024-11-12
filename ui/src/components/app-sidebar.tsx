@@ -25,8 +25,8 @@ const items = [
     icon: User,
   },
   {
-    title: "Drive",
-    url: "/drive",
+    title: "Data",
+    url: "/data",
     icon: HardDrive,
   },
   {

@@ -10,8 +10,14 @@ High Level Requirements:
 
 --
 
-* [ ] Mon Nov 11 - Schema Validate, Write, Create
-* [ ] Tue Nov 12 - Table Display Speedrun
+* [x] Mon Nov 11 - Schema Validate, Write, Create
+* [ ] Tue Nov 12 - UI Display Speedrun
+  * Paginate through schema Data
+  * List Bots
+  * Move Bot config to DB, frontend
+  * Construct Blob of events
+  * Add events from ticket
+  * Share Ticket
 * [ ] Wed Nov 13 - Simplified Search
 * [ ] Thu Nov 14 - Ticket-Based Share flow
 * [ ] Fri Nov 15 - Demo for team

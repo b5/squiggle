@@ -5,7 +5,6 @@ use flow::{Flow, FlowOutput};
 
 use crate::repo::Repo;
 
-mod api;
 mod blobs;
 mod config;
 mod content_routing;

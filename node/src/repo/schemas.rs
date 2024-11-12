@@ -4,12 +4,9 @@ use anyhow::{anyhow, Context, Result};
 use bytes::Bytes;
 use iroh::blobs::Hash;
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 
-use crate::router::{Router, RouterClient};
-
-use super::events::{nostr_id, EventKind, HashOrContent};
-use super::{Repo, DB};
+use super::Repo;
+use crate::router::RouterClient;
 
 #[derive(Debug, Serialize, Deserialize)]
 struct SchemaMetadata {
@@ -20,7 +17,7 @@ struct SchemaMetadata {
 pub struct Schema {
     pub title: String,
     pub hash: Hash,
-    data: Option<Bytes>,
+    pub data: Option<serde_json::Value>,
 }
 
 impl Schema {
@@ -35,21 +32,18 @@ impl Schema {
     pub async fn load(router: &RouterClient, hash: Hash) -> Result<Self> {
         let bytes = router.blobs().read_to_bytes(hash).await?;
         let meta: SchemaMetadata = serde_json::from_slice(&bytes)?;
-        let bytes = router.blobs().read_to_bytes(hash).await?;
+        let data = serde_json::from_slice(&bytes)?;
 
         Ok(Schema {
             title: meta.title,
             hash,
-            data: Some(bytes),
+            data: Some(data),
         })
     }
 
     pub fn validator(&self) -> Result<jsonschema::Validator> {
         match &self.data {
-            Some(data) => {
-                let schema = serde_json::from_slice(data)?;
-                jsonschema::validator_for(&schema).context("failed to create validator")
-            }
+            Some(data) => jsonschema::validator_for(data).context("failed to create validator"),
             None => Err(anyhow!("no validator found")),
         }
     }
@@ -108,7 +102,7 @@ impl Schemas {
         Ok(Schema {
             title: meta.title,
             hash: res.hash,
-            data: Some(data),
+            data: Some(schema),
         })
     }
 
@@ -145,15 +139,28 @@ impl Schemas {
 
     pub async fn list(&self, offset: i64, limit: i64) -> Result<Vec<Schema>> {
         let conn = self.0.db.lock().await;
-        let mut stmt = conn.prepare("SELECT DISTINCT schema FROM events LIMIT ?1 OFFSET ?2")?;
+        let mut stmt = conn
+            .prepare("SELECT DISTINCT schema FROM events LIMIT ?1 OFFSET ?2")
+            .context("selecting schemas from events table")?;
         let mut rows = stmt.query([limit, offset])?;
 
         let mut schemas = Vec::new();
         while let Some(row) = rows.next()? {
             let hash: String = row.get(0)?;
             let hash = Hash::from_str(&hash)?;
-            let schema = Schema::load(self.0.router(), hash).await?;
-            schemas.push(schema);
+            match Schema::load(self.0.router(), hash).await {
+                Ok(schema) => {
+                    schemas.push(schema);
+                }
+                Err(e) => {
+                    // TODO - what to do when we can't load schema data?
+                    tracing::error!(
+                        "failed to load schema for hash: {:?} {:?}",
+                        hash.to_string(),
+                        e
+                    );
+                }
+            }
         }
         Ok(schemas)
     }

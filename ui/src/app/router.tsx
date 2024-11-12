@@ -16,8 +16,12 @@ const router = createBrowserRouter([
         lazy: () => import('./people'),
       },
       {
-        path: 'drive',
-        lazy: () => import('./drive'),
+        path: 'data/:schemaHash',
+        lazy: () => import('./table')
+      },
+      {
+        path: 'data',
+        lazy: () => import('./data'),
       },
       {
         path: 'bots',

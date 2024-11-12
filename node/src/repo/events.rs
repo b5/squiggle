@@ -5,6 +5,7 @@ use iroh::docs::Author;
 use iroh::net::key::PublicKey;
 use rusqlite::params;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::fmt;
 use std::str::FromStr;
@@ -131,7 +132,7 @@ pub(crate) fn nostr_id(
 #[derive(Debug, Serialize, Deserialize)]
 pub enum HashOrContent {
     Hash(Hash),
-    Content(Bytes),
+    Content(Value),
 }
 
 impl From<Hash> for HashOrContent {
@@ -139,6 +140,9 @@ impl From<Hash> for HashOrContent {
         HashOrContent::Hash(hash)
     }
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Tag(String, String, Option<String>);
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Event {
@@ -151,9 +155,6 @@ pub struct Event {
     pub sig: String,
     pub content: HashOrContent,
 }
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Tag(String, String, Option<String>);
 
 impl Event {
     async fn mutate(
@@ -217,7 +218,10 @@ impl Event {
         let data_id = self.data_id()?;
         let content = match self.content {
             HashOrContent::Hash(ref hash) => hash.to_string(),
-            HashOrContent::Content(ref data) => String::from_utf8(data.to_vec())?,
+            HashOrContent::Content(ref data) => {
+                let data = serde_json::to_vec(data)?;
+                String::from_utf8(data)?
+            },
         };
         conn.execute(
             "INSERT INTO events (id, pubkey, created_at, kind, schema, data_id, content, sig) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
@@ -236,7 +240,6 @@ impl Event {
     }
 
     fn from_sql_row(row: &rusqlite::Row) -> Result<Self> {
-        println!("row: {:?}", row);
         // (0   1       2           3     4       5        6       7)
         // (id, pubkey, created_at, kind, schema, data_id, content, sig)
         let id: String = row.get(0)?;
@@ -294,11 +297,13 @@ impl Events {
     pub async fn query(
         &self,
         schema: Hash,
-        query: String
+        _query: String,
+        offset: i64,
+        limit: i64
     ) -> Result<Vec<Event>> {
         let conn = self.0.db.lock().await;
-        let mut stmt = conn.prepare("SELECT id, pubkey, created_at, kind, schema, data_id, content, sig FROM events WHERE schema = ?1")?;
-        let mut rows = stmt.query(params![schema.to_string()])?;
+        let mut stmt = conn.prepare("SELECT id, pubkey, created_at, kind, schema, data_id, content, sig FROM events WHERE schema = ?1 LIMIT ?2 OFFSET ?3")?;
+        let mut rows = stmt.query(params![schema.to_string(), limit, offset])?;
         let mut events = Vec::new();
         
 
@@ -309,10 +314,10 @@ impl Events {
                 HashOrContent::Content(_) => panic!("must be a hash")
             };
             let content = self.0.router.blobs().read_to_bytes(content_hash).await?;
+            let content = serde_json::from_slice::<Value>(&content).map_err(|e| anyhow!(e))?;
             event.content = HashOrContent::Content(content);
             events.push(event);
         }
-        println!("events: {:?}", &events);
         Ok(events)
     }
 }

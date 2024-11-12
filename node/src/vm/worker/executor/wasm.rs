@@ -8,8 +8,6 @@ use iroh::docs::Author;
 use tracing::debug;
 use uuid::Uuid;
 
-use crate::repo::capabilities::Capability;
-use crate::repo::schemas::Schema;
 use crate::repo::Repo;
 use crate::vm::blobs::Blobs;
 
@@ -202,7 +200,7 @@ host_fn!(event_query(ctx: WasmContext; schema: String, query: String) -> Vec<u8>
 
     tokio::task::block_in_place(|| {
         ctx.rt.block_on(async move {
-            let res = events.query(schema, query).await?;
+            let res = events.query(schema, query, 0, -1).await?;
             let data = serde_json::to_vec(&res).map_err(|e| anyhow!("failed to serialize events: {}", e))?;
             data.to_bytes()
         })
