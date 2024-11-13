@@ -26,6 +26,10 @@ const router = createBrowserRouter([
       {
         path: 'bots',
         lazy: () => import('./bots'),
+      },
+      {
+        path: 'browse',
+        lazy: () => import('./webpage'),
       }
       // {
       //   path: 'settings',

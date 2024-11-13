@@ -18,8 +18,10 @@ import {
   CommandSeparator,
   CommandShortcut,
 } from "@/components/ui/command"
+import { useNavigate } from "react-router-dom"
 
 export function CommandDialogMenu() {
+  const navigate = useNavigate()
   const [open, setOpen] = React.useState(false)
 
   React.useEffect(() => {
@@ -27,6 +29,10 @@ export function CommandDialogMenu() {
       if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault()
         setOpen((open) => !open)
+      } else if (e.key === "Enter" && open) {
+        setOpen(false)
+        navigate("browse")
+        return
       }
     }
 

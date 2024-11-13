@@ -351,7 +351,9 @@ async fn import(
 ) -> anyhow::Result<(TempTag, u64, Collection)> {
     let path = path.canonicalize()?;
     anyhow::ensure!(path.exists(), "path {} does not exist", path.display());
-    let root = path.parent().context("context get parent")?;
+    anyhow::ensure!(path.is_dir(), "path {} is not a directory", path.display());
+    // let root = path.parent().context("context get parent")?;
+    let root = path.clone();
     // walkdir also works for files, so we don't need to special case them
     let files = WalkDir::new(path.clone()).into_iter();
     // flatten the directory structure into a list of (name, path) pairs.
@@ -364,7 +366,7 @@ async fn import(
                 return Ok(None);
             }
             let path = entry.into_path();
-            let relative = path.strip_prefix(root)?;
+            let relative = path.strip_prefix(&root)?;
             let name = canonicalized_path_to_string(relative, true)?;
             anyhow::Ok(Some((name, path)))
         })
