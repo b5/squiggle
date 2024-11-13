@@ -1,5 +1,4 @@
 use anyhow::{anyhow, Result};
-use bytes::Bytes;
 use iroh::blobs::Hash;
 use iroh::docs::Author;
 use iroh::net::key::PublicKey;

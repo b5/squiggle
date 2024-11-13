@@ -5,7 +5,7 @@ use datalayer_node::vm::DEFAULT_WORKSPACE;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let path = std::path::PathBuf::from("test");
+    let path = datalayer_node::node::data_root()?;
     let node = Node::open(path).await?;
     // let events = node.repo().list_events().await?;
     // let b5 = node

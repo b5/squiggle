@@ -1,6 +1,4 @@
 
-
-
 HashSequences form a really nice substrate for places where we'd normally use merkle-backpointers
 * using public key infra maintains that trust derives from trust in the signer
 * we know merkle-backpointers end up leading to 
@@ -103,3 +101,98 @@ struct Event {
 }
 
 ```
+
+## Programs
+* programs can be loaded from URLs that respond to an HTTP GET request with a blob ticket that points to an iroh collection
+* program collections must contain the following files:
+```
+datalayer.json -- manifest of info about the program, and test
+
+```
+* a program MAY contain an `index.html`, which is interpreted to be the entry point for the program
+* the resulting program will have
+
+* response string of an HTTP get to `/datalayer` should be a blob ticket for the program
+* 
+
+## Capabilities
+
+https://github.com/ucan-wg/spec?tab=readme-ov-file#command
+
+* Capabilities table determines what programs are installed
+  * installation = any capabilitiy issued for the program identifier
+
+* Command Space:
+```js
+"/"                  // 
+"/evt/"
+"/evt/read"
+"/evt/write"
+"/evt/schema/"
+"/evt/schema/read"
+"/evt/schema/write"
+"/evt/schema/list"
+
+"/exe" // execute 
+// "/exe/html/"
+// "/exe/evt/"
+// "/exe/evt/read"
+// "/exe/evt/write"
+// "/exe/evt/schema/"
+// "/exe/evt/schema/read"
+// "/exe/evt/schema/write"
+// "/exe/evt/schema/list"
+
+// "/prg/"
+// "/exe/evt/"
+// "/exe/evt/read"
+// "/exe/evt/write"
+```
+
+* `/exe` - execute command policy options
+
+
+* `HTTP` make HTTP requests
+  * refinement by verb set: {`*`, `GET`, `PUT`, `POST`, `DELETE`, etc. }
+* execute in the background
+  * refine by resource characteristics, memory, timeouts, etc.
+* display UI
+* read / write / list events
+  * usually scoped to a schema, or set of schemas
+* self-update
+
+
+* read user profile information
+* run a program
+  * make HTTP calls within a program
+    * make HTTP {POST,GET,PUT,POST} calls within a program
+  * read (and list) events
+  * write events
+
+A user Alice adding a program "TicTacToe" will look like this:
+
+| field              | value                |
+| ------------------ | -------------------- |
+| `iss`: issuer      | `AliceKey`           |
+| `aud`: audience    | `TicTacToeKey`       |
+| `sub`: subject     | `TicTacToeProgramID` |
+| `cmd`: command     | `"/exe"`         |
+| `pol`: policy      | `[]` |
+
+
+# Standard Schemas:
+Datalayer comes with a few *required* schemas that allow it to operate
+
+* Programs:
+
+```
+{
+  "type": "array",
+  "prefixItems": [
+
+  ]
+}
+```
+
+* Configurations
+* 

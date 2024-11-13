@@ -8,13 +8,12 @@ use iroh::base::node_addr::AddrInfoOptions;
 use iroh::client::docs::ShareMode;
 use iroh::docs::{store::Query, AuthorId, DocTicket, NamespaceId};
 use iroh::net::NodeId;
-use tokio::sync::{RwLock, RwLockMappedWriteGuard, RwLockReadGuard, RwLockWriteGuard};
+use tokio::sync::{RwLock, RwLockReadGuard};
 use tokio::task::JoinHandle;
 use tracing::{debug, info, info_span, warn, Instrument};
 use uuid::Uuid;
 
 use crate::repo::Repo;
-use crate::router::RouterClient;
 
 use super::blobs::Blobs;
 use super::config::NodeConfig;
@@ -182,23 +181,8 @@ pub struct Workspaces {
 }
 
 impl Workspaces {
-    pub fn node(&self) -> &RouterClient {
-        &self.repo.router()
-    }
-
-    pub async fn list(&self) -> Vec<String> {
-        self.inner.read().await.keys().cloned().collect()
-    }
-
     pub async fn get(&self, name: &str) -> Option<RwLockReadGuard<'_, Workspace>> {
         let guard = RwLockReadGuard::try_map(self.inner.read().await, |l| l.get(name)).ok()?;
-
-        Some(guard)
-    }
-
-    pub async fn get_mut(&self, name: &str) -> Option<RwLockMappedWriteGuard<'_, Workspace>> {
-        let guard =
-            RwLockWriteGuard::try_map(self.inner.write().await, |l| l.get_mut(name)).ok()?;
 
         Some(guard)
     }
@@ -249,29 +233,29 @@ impl Workspaces {
         Ok(())
     }
 
-    pub async fn join_workspace(&self, ticket: DocTicket) -> Result<()> {
-        debug!("joining workspace, ticket: {:?}", ticket);
+    // pub async fn join_workspace(&self, ticket: DocTicket) -> Result<()> {
+    //     debug!("joining workspace, ticket: {:?}", ticket);
 
-        let router = self.repo.router();
-        let doc = join_doc(router, ticket).await?;
-        let name = load_name(&doc).await?;
-        let router_id = router.net().node_id().await?;
-        if !self.contains(&name).await {
-            let ws = Workspace::open(
-                name,
-                router_id,
-                &self.repo,
-                doc,
-                self.cfg.workspace_config(),
-            )
-            .await?;
-            self.inner.write().await.insert(ws.name.clone(), ws);
-            self.write_to_file().await?;
-        } else {
-            debug!("workspace already open: {}", name);
-        }
-        Ok(())
-    }
+    //     let router = self.repo.router();
+    //     let doc = join_doc(router, ticket).await?;
+    //     let name = load_name(&doc).await?;
+    //     let router_id = router.net().node_id().await?;
+    //     if !self.contains(&name).await {
+    //         let ws = Workspace::open(
+    //             name,
+    //             router_id,
+    //             &self.repo,
+    //             doc,
+    //             self.cfg.workspace_config(),
+    //         )
+    //         .await?;
+    //         self.inner.write().await.insert(ws.name.clone(), ws);
+    //         self.write_to_file().await?;
+    //     } else {
+    //         debug!("workspace already open: {}", name);
+    //     }
+    //     Ok(())
+    // }
 
     async fn write_to_file(&self) -> Result<()> {
         let inner = self.inner.read().await;

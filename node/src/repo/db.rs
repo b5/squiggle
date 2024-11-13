@@ -41,25 +41,42 @@ pub(crate) async fn setup_db(db: &DB) -> Result<()> {
         [],
     )?;
 
+    // a list of capabilities, either from others or self-issued
+    // A capability is the association of an ability to a subject: subject x command x policy.
     conn.execute(
-        "CREATE TABLE IF NOT EXISTS users (
-            pubkey BLOB NOT NULL,
-            privkey BLOB,
-            name TEXT,
-            about TEXT,
-            picture TEXT
-        )",
-        [],
-    )?;
-
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS data (
-            schema TEXT NOT NULL,
-            id TEXT PRIMARY KEY NOT NULL,
-            data TEXT NOT NULL
+        "CREATE TABLE IF NOT EXISTS capabilities (
+        iss   TEXT NOT NULL,    -- Issuer: key of the sender granting the capability
+        aud   TEXT NOT NULL,    -- Principal: what this capability is about (eg: a program)
+        sub   TEXT NOT NULL,    -- Audience: receiver of the capability: a user or a program
+        cmd   TEXT NOT NULL,    -- Command (e.g. 'read', 'write', 'follow', 'mute', 'block')
+        pol   TEXT NOT NULL,    -- Policy: refinements on the command
+        nonce TEXT NOT NULL,    -- Unique nonce to prevent replay attacks
+        exp   INTEGER,          -- Expiration UTC Unix Timestamp in seconds (valid until)
+        nbf   INTEGER,          -- 'Not before' UTC Unix Timestamp in seconds (valid from)
+        sig   TEXT,             -- Signature of the capability
     )",
         [],
     )?;
+
+    // conn.execute(
+    //     "CREATE TABLE IF NOT EXISTS users (
+    //         pubkey BLOB NOT NULL,
+    //         privkey BLOB,
+    //         name TEXT,
+    //         about TEXT,
+    //         picture TEXT
+    //     )",
+    //     [],
+    // )?;
+
+    // conn.execute(
+    //     "CREATE TABLE IF NOT EXISTS data (
+    //         schema TEXT NOT NULL,
+    //         id TEXT PRIMARY KEY NOT NULL,
+    //         data TEXT NOT NULL
+    // )",
+    //     [],
+    // )?;
 
     Ok(())
 }

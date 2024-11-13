@@ -54,20 +54,6 @@ impl Users {
         Users(repo)
     }
 
-    // ensure agreement between iroh authors and repo authors
-    async fn sync_authors(&self) -> Result<()> {
-        let mut authors = self.0.router.authors().list().await?;
-        let conn = self.0.db.lock().await;
-        while let Some(author_id) = authors.next().await {
-            let author_id = author_id?;
-            conn.execute(
-                "INSERT OR IGNORE INTO users (pubkey, name, about, picture) VALUES (?1, ?2, ?3, ?4)",
-                params![author_id.to_bytes(), generate_name(), "", ""],
-            )?;
-        }
-        Ok(())
-    }
-
     pub async fn create(&self, name: String, about: String, picture: String) -> Result<User> {
         User::create(&self.0.db, name, about, picture).await
     }
