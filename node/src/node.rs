@@ -2,7 +2,9 @@ use std::env;
 use std::path::PathBuf;
 
 use anyhow::{anyhow, Result};
+use futures::StreamExt;
 use iroh::util::path::IrohPaths;
+use tokio::task::JoinHandle;
 
 use crate::repo::Repo;
 use crate::router::Router;
@@ -26,6 +28,18 @@ impl Node {
         let author = iroh::docs::Author::from_bytes(&secret_key.to_bytes());
         router.authors().import(author.clone()).await?;
 
+        let mut blobs = router.blobs().list().await?;
+        while let Some(blob) = blobs.next().await {
+            let blob = blob?;
+            println!("blob: {:?}", blob);
+        }
+
+        let mut tags = router.tags().list().await?;
+        while let Some(tag) = tags.next().await {
+            let tag = tag?;
+            println!("tag: {:?}", tag);
+        }
+
         let repo = Repo::open(router.client().clone(), &path).await?;
         let vm = VM::new(repo.clone(), &path).await?;
 
@@ -42,6 +56,18 @@ impl Node {
 
     pub fn vm(&self) -> &VM {
         &self.vm
+    }
+
+    pub async fn gateway(&self, serve_addr: &str) -> Result<JoinHandle<()>> {
+        let addr = self.router.net().node_addr().await?;
+        let serve_addr = serve_addr.to_string();
+        let handle = tokio::spawn(async move {
+            crate::gateway::server::run(addr, serve_addr)
+                .await
+                .expect("gateway failed");
+        });
+
+        Ok(handle)
     }
 }
 

@@ -20,7 +20,7 @@ async fn main() -> Result<()> {
     let authors = node.repo().users().authors().await?;
 
     let mut flow =
-        datalayer_node::vm::flow::Flow::load("../bots/github_repo_stargazers/stargazers.toml")
+        datalayer_node::vm::flow::Flow::load("../programs/github_repo_stargazers/stargazers.toml")
             .await?;
     flow.tasks
         .iter_mut()

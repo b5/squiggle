@@ -52,10 +52,14 @@ async fn run_flow(node: tauri::State<'_, Arc<Node>>, path: &str) -> Result<FlowO
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let node = tauri::async_runtime::block_on(async move {
-        let path = std::path::PathBuf::from("../../node/test");
+        let path = datalayer_node::node::data_root().unwrap();
         let node = datalayer_node::node::Node::open(path)
             .await
             .expect("failed to build datalayer");
+        // TODO - capture & cleanup task handle
+        node.gateway("127.0.0.1:8080")
+            .await
+            .expect("failed to start gateway");
         node
     });
 

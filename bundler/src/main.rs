@@ -28,7 +28,7 @@ use iroh_blobs::{
         request::get_hash_seq_and_sizes,
     },
     provider::{self, handle_connection, CustomEventSender, EventSender},
-    store::{ExportMode, ImportMode, ImportProgress},
+    store::{ExportMode, ImportMode, ImportProgress, ReadableStore, Store},
     util::local_pool::LocalPool,
     BlobFormat, Hash, HashAndFormat, TempTag,
 };
@@ -543,15 +543,11 @@ async fn send(args: SendArgs) -> anyhow::Result<()> {
     }
     let endpoint_fut = builder.bind();
 
-    let iroh_data_dir = datalayer_node::node::data_root()?;
-    if iroh_data_dir.exists() {
-        println!("can not share twice from the same directory");
-        std::process::exit(1);
-    }
-    let iroh_data_dir_2 = iroh_data_dir.clone();
+    let iroh_data_dir = datalayer_node::node::data_root()?.join("blobs");
+    println!("using data directory {}", iroh_data_dir.display());
+
     let _control_c = tokio::spawn(async move {
         tokio::signal::ctrl_c().await?;
-        std::fs::remove_dir_all(iroh_data_dir_2)?;
         std::process::exit(1);
         #[allow(unreachable_code)]
         anyhow::Ok(())
@@ -560,7 +556,10 @@ async fn send(args: SendArgs) -> anyhow::Result<()> {
     let db = iroh_blobs::store::fs::Store::load(&iroh_data_dir).await?;
     let path = args.path;
     let (temp_tag, size, collection) = import(path.clone(), db.clone()).await?;
+
     let hash = *temp_tag.hash();
+    db.create_tag(HashAndFormat::new(hash, BlobFormat::HashSeq))
+        .await?;
     // wait for the endpoint to be ready
     let endpoint = endpoint_fut.await?;
     // wait for the endpoint to figure out its address before making a ticket

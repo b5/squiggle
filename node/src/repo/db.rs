@@ -53,7 +53,7 @@ pub(crate) async fn setup_db(db: &DB) -> Result<()> {
         nonce TEXT NOT NULL,    -- Unique nonce to prevent replay attacks
         exp   INTEGER,          -- Expiration UTC Unix Timestamp in seconds (valid until)
         nbf   INTEGER,          -- 'Not before' UTC Unix Timestamp in seconds (valid from)
-        sig   TEXT,             -- Signature of the capability
+        sig   TEXT              -- Signature of the capability
     )",
         [],
     )?;

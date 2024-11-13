@@ -13,13 +13,17 @@ High Level Requirements:
 * [x] Mon Nov 11 - Schema Validate, Write, Create
 * [ ] Tue Nov 12 - UI Display Speedrun
   * [x] Paginate through schema Data
-  * [ ] List ~~Bots~~ Programs
-  * [ ] Move App config to DB, frontend
+  * [ ] List Programs
+  * [ ] Move App config to schema
+    * [ ] Settings program
+* [ ] Wed Nov 13 - Everything is a program
+  * [ ] program constructor function in repo
+    * [ ] node CLI command for building programs
+  * [ ] inline small amounts of content into events table in JSON format
+* [ ] Thu Nov 14 - Ticket-Based Share flow
   * [ ] Construct Blob of events
   * [ ] Add events from ticket
   * [ ] Share Ticket
-* [ ] Wed Nov 13 - Simplified Search
-* [ ] Thu Nov 14 - Ticket-Based Share flow
 * [ ] Fri Nov 15 - Demo for team
 
 --
