@@ -8,6 +8,11 @@ High Level Requirements:
 * permit access to data with others
 * sync that shared data with others
 
+-- 
+
+* [ ] Need a "hard refresh" option, ideally keyboard shortcut
+* [ ] bundler should move into node
+
 --
 
 * [x] Mon Nov 11 - Schema Validate, Write, Create

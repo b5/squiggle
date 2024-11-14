@@ -38,5 +38,6 @@ export interface Event {
   data: string;
 }
 
-export const useListSchemas = ApiFactory<Pagniation, [Schema]>("schemas_list");
+export const useQuerySchemas = ApiFactory<Pagniation, [Schema]>("schemas_list");
+export const useQuerySchema = ApiFactory<{ schema: string }, Schema>("schemas_get");
 export const useQueryEvents = ApiFactory<{ schema: string, offset: number, limit: number }, [Event]>("events_query");

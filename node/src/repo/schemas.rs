@@ -137,6 +137,15 @@ impl Schemas {
             .ok_or_else(|| anyhow!("schema not found"))
     }
 
+    pub async fn get_by_hash(&self, hash: Hash) -> Result<Schema> {
+        // TODO - SLOW
+        self.list(0, -1)
+            .await?
+            .into_iter()
+            .find(|schema| schema.hash.eq(&hash))
+            .ok_or_else(|| anyhow!("schema not found"))
+    }
+
     pub async fn list(&self, offset: i64, limit: i64) -> Result<Vec<Schema>> {
         let conn = self.0.db.lock().await;
         let mut stmt = conn

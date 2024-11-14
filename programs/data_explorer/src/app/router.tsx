@@ -9,7 +9,7 @@ const router = createHashRouter([
     children: [
       {
         path: '',
-        lazy: () => import('./home'),
+        lazy: () => import('./tables'),
       },
       {
         path: 'people',
@@ -18,10 +18,6 @@ const router = createHashRouter([
       {
         path: 'data/:schemaHash',
         lazy: () => import('./table')
-      },
-      {
-        path: 'data',
-        lazy: () => import('./data'),
       },
       {
         path: 'bots',

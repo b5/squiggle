@@ -67,15 +67,14 @@ pub fn run() {
             )?;
 
             window.add_child(
-                tauri::webview::WebviewBuilder::new(COZY_LABEL, WebviewUrl::App("index.html".into()))
+                tauri::webview::WebviewBuilder::new(COZY_LABEL, WebviewUrl::App("cozy.html".into()))
                     .auto_resize(),
                 LogicalPosition::new(12., 12.),
                 LogicalSize::new(width - 24., height - 24.),
             )?;
 
             window.add_child(
-                tauri::webview::WebviewBuilder::new(CHROME_LABEL, WebviewUrl::App("index.html".into()))
-                    .transparent(true)
+                tauri::webview::WebviewBuilder::new(CHROME_LABEL, WebviewUrl::App("chrome.html".into()))
                     .auto_resize(),
                 LogicalPosition::new(0., 0.),
                 LogicalSize::new(width, height),
@@ -105,7 +104,7 @@ pub fn run() {
             Ok(())
         })
         .manage(Arc::new(node))
-        .invoke_handler(tauri::generate_handler![navigate, accounts_list, schemas_list, events_query, run_flow])
+        .invoke_handler(tauri::generate_handler![navigate, accounts_list, schemas_list, schemas_get, events_query, run_flow])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
@@ -167,6 +166,17 @@ async fn schemas_list(node: tauri::State<'_, Arc<Node>>) -> Result<Vec<Schema>, 
     tokio::task::block_in_place(|| {
         tauri::async_runtime::block_on(async move {
             node.repo().schemas().list(0, -1).await.map_err(|e| e.to_string())
+        })
+    })
+}
+
+#[tauri::command]
+async fn schemas_get(node: tauri::State<'_, Arc<Node>>, schema: &str) -> Result<Schema, String> {
+    let node = node.clone();
+    let schema_hash = Hash::from_str(schema).map_err(|e| e.to_string())?;
+    tokio::task::block_in_place(|| {
+        tauri::async_runtime::block_on(async move {
+            node.repo().schemas().get_by_hash(schema_hash).await.map_err(|e| e.to_string())
         })
     })
 }
