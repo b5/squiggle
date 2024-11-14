@@ -28,7 +28,7 @@ use iroh_blobs::{
         request::get_hash_seq_and_sizes,
     },
     provider::{self, handle_connection, CustomEventSender, EventSender},
-    store::{ExportMode, ImportMode, ImportProgress, ReadableStore, Store},
+    store::{ExportMode, ImportMode, ImportProgress, Store},
     util::local_pool::LocalPool,
     BlobFormat, Hash, HashAndFormat, TempTag,
 };
@@ -382,7 +382,7 @@ async fn import(
             let progress = progress.clone();
             async move {
                 let (temp_tag, file_size) = db
-                    .import_file(path, ImportMode::TryReference, BlobFormat::Raw, progress)
+                    .import_file(path, ImportMode::Copy, BlobFormat::Raw, progress)
                     .await?;
                 anyhow::Ok((name, temp_tag, file_size))
             }

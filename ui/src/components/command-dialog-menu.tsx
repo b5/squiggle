@@ -21,7 +21,6 @@ import {
 } from "@/components/ui/command"
 
 export function CommandDialogMenu({ navigate }: { navigate: (to: string) => void }) {
-  // const [open, setOpen] = React.useState(true)
   const [value, setValue] = React.useState("")
   const [searchValue, setSearchValue] = React.useState("")
 
@@ -29,7 +28,7 @@ export function CommandDialogMenu({ navigate }: { navigate: (to: string) => void
     const down = (e: KeyboardEvent) => {
       if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault()
-        // setOpen((open) => !open)
+        emit('dismiss-ui', {})
       } else if (e.key === "Escape") {
         emit('dismiss-ui', {})
       }
@@ -40,22 +39,32 @@ export function CommandDialogMenu({ navigate }: { navigate: (to: string) => void
     return () => document.removeEventListener("keydown", down)
   }, [])
 
+  const navHandler = (url: string) => {
+    return () => {
+      navigate(url)
+      emit('dismiss-ui', {})
+    }
+  }
+
   return (
     <CommandDialog open={true} onOpenChange={(newOpen)  => { if (!newOpen) { emit('dismiss-ui', {}) } }} value={value} onValueChange={(v) => { setValue(v); }}>
       <CommandInput value={searchValue} onValueChange={(v) => setSearchValue(v)} placeholder="Type a command or search..." />
       <CommandList>
         <CommandGroup>
-          <CommandItem value={searchValue} onSelect={navigate}>
+          <CommandItem value={searchValue} onSelect={(url) => {
+            navigate(url)
+            emit('dismiss-ui', {})
+          }}>
               <ArrowRight />
               <span>go</span>
           </CommandItem>
         </CommandGroup>
         <CommandGroup heading="Suggestions">
-          <CommandItem value="calendar" onSelect={(_) => navigate("https://youtube.com")}>
+          <CommandItem value="calendar" onSelect={navHandler("https://youtube.com")}>
             <Calendar />
             <span>Calendar</span>
           </CommandItem>
-          <CommandItem value="emoji" onSelect={(_) => navigate("https://apple.com")}>
+          <CommandItem value="emoji" onSelect={navHandler("https://apple.com")}>
             <Smile />
             <span>Search Emoji</span>
           </CommandItem>

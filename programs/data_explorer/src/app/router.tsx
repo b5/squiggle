@@ -1,11 +1,11 @@
-import { RouterProvider, createBrowserRouter } from 'react-router-dom'
+import { RouterProvider, createHashRouter } from 'react-router-dom'
 
 // import NotFound from "./layouts/NotFound"
 
-const router = createBrowserRouter([
+const router = createHashRouter([
   {
     path: '/',
-    lazy: () => import('./Layout'),
+    lazy: () => import('./layout'),
     children: [
       {
         path: '',
@@ -27,40 +27,8 @@ const router = createBrowserRouter([
         path: 'bots',
         lazy: () => import('./bots'),
       },
-      {
-        path: 'browse',
-        lazy: () => import('./webpage'),
-      }
-      // {
-      //   path: 'settings',
-      //   lazy: () => import('./settings/settings'),
-      // },
-      // {
-      //   path: 'content',
-      //   lazy: () => import('./content/page'),
-      // },
-      // {
-      //   path: 'content/:id',
-      //   lazy: () => import('./content/content-item'),
-      // },
-      // {
-      //   path: 'devices',
-      //   lazy: () => import('./devices/devices'),
-      // },
-      // {
-      //   path: 'devices/:nodeId',
-      //   lazy: () => import('./devices/device'),
-      // },
     ],
   },
-  // {
-  //   path: '/login',
-  //   lazy: () => import('../app/session/login'),
-  // },
-  // {
-  //   path: '/signup',
-  //   lazy: () => import('../app/session/signup'),
-  // },
   {
     path: '*',
     element: <h1>Not Found</h1>,

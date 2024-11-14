@@ -3,8 +3,7 @@ name = "github_repo_stargazers"
 [[uploads]]
 name = "github_repo_stargazers.wasm"
 [uploads.source.file]
-# path = "./dist/plugin.wasm"
-path = "../bots/github_repo_stargazers/dist/plugin.wasm"
+path = "../programs/github_repo_stargazers/dist/plugin.wasm"
 
 [[tasks]]
 

@@ -15,7 +15,7 @@ export function Component() {
   return (
     <div className="p-4">
       <h1>Data</h1>
-      {data.map((e) => { 
+      {data?.map((e) => { 
         return (
           <div key={e.hash} className="p-2 border-b">
             {JSON.stringify(e)}

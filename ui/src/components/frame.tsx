@@ -11,9 +11,7 @@ const DEFAULT_PAGE = "http://localhost:8080/collection/5d0449028d46eebd75e45128e
 export function Frame() {
 
   return (
-    <div onClick={() => {
-      emit("dismiss-ui", {})
-    }}>
+    <div>
         {/* <SidebarProvider>
           <AppSidebar />
         </SidebarProvider> */}
