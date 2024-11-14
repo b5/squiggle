@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -132,7 +133,13 @@ async fn navigate<R: Runtime>(window: tauri::Window<R>, url: &str) -> Result<(),
                     view.hide().map_err(|e| e.to_string())?;
                 }
                 COZY_LABEL => {
-                    let url = url.replace("cozy://", "http://localhost:8080/collection/");
+                    let raw_hash_len = "cozy://".len() + 32;
+                    let url = match url.chars().count().cmp(&raw_hash_len) {
+                        Ordering::Equal => url.replace("cozy://", "http://localhost:8080/collection/"),
+                        // for dev server access
+                        _ => url.replace("cozy://", "http://")
+                    };
+                        
                     println!("navigating to cozy url: {:?}", url);
                     let url = tauri::Url::parse(url.as_str()).map_err(|e| e.to_string())?;
                     view.navigate(url.clone()).map_err(|e| e.to_string())?;

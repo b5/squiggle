@@ -244,7 +244,6 @@ impl Event {
         let id: String = row.get(0)?;
         let content: String = row.get(6)?;
         let data_id: Uuid = row.get(5)?;
-        println!("id: {:?} content: {:?}", &id, &content);
         Ok(Self {
             id: Sha256Digest::from_str(&id).map_err(|e| anyhow!(e))?,
             pubkey: row.get(1)?,

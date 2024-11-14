@@ -268,7 +268,8 @@ async fn handle_local_collection_index(
     Path(hash): Path<Hash>,
 ) -> std::result::Result<impl IntoResponse, AppError> {
     let connection = gateway.get_default_connection().await?;
-    let link_prefix = format!("/collection/{}", hash);
+    // let link_prefix = format!("/collection/{}", hash);
+    let link_prefix = format!("{}", hash);
     let res = collection_index(&gateway, connection, &hash, &link_prefix).await?;
     Ok(res)
 }
@@ -510,11 +511,13 @@ pub async fn run(default_node: NodeAddr, serve_addr: String) -> anyhow::Result<(
 
     #[rustfmt::skip]
     let app = Router::new()
-        .route("/blob/:blake3_hash", get(handle_local_blob_request))
-        .route("/collection/:blake3_hash", get(handle_local_collection_index))
-        .route("/collection/:blake3_hash/*path",get(handle_local_collection_request))
-        .route("/ticket/:ticket", get(handle_ticket_index))
-        .route("/ticket/:ticket/*path", get(handle_ticket_request))
+        .route(":blake3_hash", get(handle_local_collection_index))
+        .route(":blake3_hash/*path", get(handle_local_collection_request))
+        // .route("/blob/:blake3_hash", get(handle_local_blob_request))
+        // .route("/collection/:blake3_hash", get(handle_local_collection_index))
+        // .route("/collection/:blake3_hash/*path",get(handle_local_collection_request))
+        // .route("/ticket/:ticket", get(handle_ticket_index))
+        // .route("/ticket/:ticket/*path", get(handle_ticket_request))
         .layer(cors)
         .layer(Extension(gateway));
     // Run our application as just http
