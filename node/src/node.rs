@@ -2,7 +2,6 @@ use std::env;
 use std::path::PathBuf;
 
 use anyhow::{anyhow, Result};
-use futures::StreamExt;
 use iroh::util::path::IrohPaths;
 use tokio::task::JoinHandle;
 
@@ -27,18 +26,6 @@ impl Node {
             iroh::util::fs::load_secret_key(IrohPaths::SecretKey.with_root(&path)).await?;
         let author = iroh::docs::Author::from_bytes(&secret_key.to_bytes());
         router.authors().import(author.clone()).await?;
-
-        let mut blobs = router.blobs().list().await?;
-        while let Some(blob) = blobs.next().await {
-            let blob = blob?;
-            println!("blob: {:?}", blob);
-        }
-
-        let mut tags = router.tags().list().await?;
-        while let Some(tag) = tags.next().await {
-            let tag = tag?;
-            println!("tag: {:?}", tag);
-        }
 
         let repo = Repo::open(router.client().clone(), &path).await?;
         let vm = VM::new(repo.clone(), &path).await?;

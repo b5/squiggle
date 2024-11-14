@@ -7,6 +7,8 @@ use datalayer_node::repo::events::Event;
 use datalayer_node::repo::schemas::Schema;
 use datalayer_node::vm::flow::{Flow, FlowOutput};
 use datalayer_node::Hash;
+use tauri::{Runtime, LogicalPosition, LogicalSize, WebviewUrl, Listener};
+use tauri::webview::PageLoadEvent;
 
 #[tauri::command]
 async fn accounts_list(
@@ -49,6 +51,17 @@ async fn run_flow(node: tauri::State<'_, Arc<Node>>, path: &str) -> Result<FlowO
   Ok(output)
 }
 
+#[tauri::command]
+async fn navigate<R: Runtime>(window: tauri::Window<R>, url: &str) -> Result<(), String> {
+    let url = tauri::Url::parse(url).map_err(|e| e.to_string())?;
+    for mut view in window.webviews() {
+        if view.label() == "page" {
+            view.navigate(url.clone()).map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let node = tauri::async_runtime::block_on(async move {
@@ -65,8 +78,73 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .setup(|app| {
+            let width = 1600.;
+            let height = 900.;
+            let window = tauri::window::WindowBuilder::new(app, "main")
+                .inner_size(width, height)
+                .build()?;
+
+            window.add_child(
+                tauri::webview::WebviewBuilder::new("frame", WebviewUrl::App("sidebar.html".into()))
+                    .transparent(true)
+                    .auto_resize(),
+                LogicalPosition::new(0., 0.),
+                LogicalSize::new(width, height),
+            )?;
+
+            let url = tauri::Url::parse("https://youtube.com")?;
+            let page_builder = tauri::webview::WebviewBuilder::new("page", WebviewUrl::External(url))
+                .auto_resize()
+                .on_page_load(|_webview, payload| {
+                    match payload.event() {
+                    PageLoadEvent::Started => {
+                        println!("{} started loading", payload.url());
+                    }
+                    PageLoadEvent::Finished => {
+                        println!("{} finished loading", payload.url());
+                    }
+                    }
+                });
+
+            window.add_child(page_builder,
+                LogicalPosition::new(12., 12.),
+                LogicalSize::new(width - 24., height - 24.),
+            )?;
+
+            window.add_child(
+                tauri::webview::WebviewBuilder::new("chrome", WebviewUrl::App("index.html".into()))
+                    .transparent(true)
+                    .auto_resize(),
+                LogicalPosition::new(0., 0.),
+                LogicalSize::new(width, height),
+            )?;
+
+
+            let window2 = window.clone();
+            window.listen("dismiss-ui", move |event| {
+                println!("dismissing ui");
+                for view in window2.webviews() {
+                    if view.label() == "chrome" {
+                        view.hide().expect("failed to hide webview");
+                    }
+                }
+            });
+
+            let window3 = window.clone();
+            window.listen("show-ui", move |event| {
+                println!("showing ui");
+                for view in window3.webviews() {
+                    if view.label() == "chrome" {
+                        view.show().expect("failed to show webview");
+                    }
+                }
+            });
+
+            Ok(())
+        })
         .manage(Arc::new(node))
-        .invoke_handler(tauri::generate_handler![accounts_list, schemas_list, events_query, run_flow])
+        .invoke_handler(tauri::generate_handler![navigate, accounts_list, schemas_list, events_query, run_flow])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

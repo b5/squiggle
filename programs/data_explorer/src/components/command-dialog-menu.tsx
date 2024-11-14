@@ -1,6 +1,5 @@
 import * as React from "react"
 import {
-  ArrowRight,
   Calculator,
   Calendar,
   CreditCard,
@@ -8,10 +7,10 @@ import {
   Smile,
   User,
 } from "lucide-react"
-import { emit } from '@tauri-apps/api/event';
 
 import {
   CommandDialog,
+  CommandEmpty,
   CommandGroup,
   CommandInput,
   CommandItem,
@@ -19,47 +18,43 @@ import {
   CommandSeparator,
   CommandShortcut,
 } from "@/components/ui/command"
+import { useNavigate } from "react-router-dom"
 
-export function CommandDialogMenu({ navigate }: { navigate: (to: string) => void }) {
-  // const [open, setOpen] = React.useState(true)
-  const [value, setValue] = React.useState("")
-  const [searchValue, setSearchValue] = React.useState("")
+export function CommandDialogMenu() {
+  const navigate = useNavigate()
+  const [open, setOpen] = React.useState(false)
 
   React.useEffect(() => {
     const down = (e: KeyboardEvent) => {
       if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault()
-        // setOpen((open) => !open)
-      } else if (e.key === "Escape") {
-        emit('dismiss-ui', {})
+        setOpen((open) => !open)
+      } else if (e.key === "Enter" && open) {
+        setOpen(false)
+        navigate("browse")
+        return
       }
     }
 
     document.addEventListener("keydown", down)
-
     return () => document.removeEventListener("keydown", down)
   }, [])
 
   return (
-    <CommandDialog open={true} onOpenChange={(newOpen)  => { if (!newOpen) { emit('dismiss-ui', {}) } }} value={value} onValueChange={(v) => { setValue(v); }}>
-      <CommandInput value={searchValue} onValueChange={(v) => setSearchValue(v)} placeholder="Type a command or search..." />
+    <CommandDialog open={open} onOpenChange={setOpen}>
+      <CommandInput placeholder="Type a command or search..." />
       <CommandList>
-        <CommandGroup>
-          <CommandItem value={searchValue} onSelect={navigate}>
-              <ArrowRight />
-              <span>go</span>
-          </CommandItem>
-        </CommandGroup>
+        <CommandEmpty>No results found.</CommandEmpty>
         <CommandGroup heading="Suggestions">
-          <CommandItem value="calendar" onSelect={(_) => navigate("https://youtube.com")}>
+          <CommandItem>
             <Calendar />
             <span>Calendar</span>
           </CommandItem>
-          <CommandItem value="emoji" onSelect={(_) => navigate("https://apple.com")}>
+          <CommandItem>
             <Smile />
             <span>Search Emoji</span>
           </CommandItem>
-          <CommandItem value="https://n0.computer" onSelect={navigate}>
+          <CommandItem>
             <Calculator />
             <span>Calculator</span>
           </CommandItem>

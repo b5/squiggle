@@ -10,13 +10,8 @@
     "frontendDist": "../dist"
   },
   "app": {
-    "windows": [
-      {
-        "title": "datalayer",
-        "width": 800,
-        "height": 600
-      }
-    ],
+    "macOSPrivateApi": true,
+    "windows": [],
     "security": {
       "csp": null
     }
