@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0.92"
 async-broadcast = "0.7.1"
+async-channel = "2.3.1"
 axum = "0.7.7"
 bollard = "0.17.1"
 bytes = "1.8.0"
@@ -20,6 +21,7 @@ extism = "1.8.0"
 flume = "0.11.0"
 futures = "0.3.31"
 futures-buffered = "0.2.9"
+futures-lite = "2.5.0"
 headers = { version = "0.4" }
 hex = { version = "0.4.3", features = ["serde"] }
 hyper = "1"
@@ -33,6 +35,7 @@ lru = "0.12.1"
 mime = "0.3.17"
 mime_classifier = "0.0.1"
 mime_guess = "2.0.4"
+num_cpus = "1.16.0"
 rand = "0.8.5"
 range-collections = "0.4.5"
 rusqlite = { version = "0.32.1", features = ["uuid"] }

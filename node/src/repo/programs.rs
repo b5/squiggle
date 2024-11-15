@@ -1,21 +1,20 @@
 use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
-use std::path::PathBuf;
 use std::path::{Component, Path, PathBuf};
-use std::str::FromStr;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{anyhow, Context, Result};
 use bytes::Bytes;
-use console::style;
 use futures_buffered::BufferedStreamExt;
 use futures_lite::{future::Boxed, StreamExt};
 use indicatif::{
     HumanBytes, HumanDuration, MultiProgress, ProgressBar, ProgressDrawTarget, ProgressStyle,
 };
 use iroh::blobs::Hash;
+use iroh::docs::Author;
+use iroh::net::key::PublicKey;
 use iroh_base::{node_addr::AddrInfoOptions, ticket::BlobTicket};
 use iroh_blobs::{
     format::collection::Collection,
@@ -35,16 +34,16 @@ use iroh_net::{
     Endpoint,
 };
 use serde::{Deserialize, Serialize};
-use tokio::io::BufReader;
+use uuid::Uuid;
 use walkdir::WalkDir;
 
+use super::events::{Event, EventKind, EventObject, HashOrContent, Tag, NOSTR_ID_TAG};
 use super::Repo;
-use crate::repo::schemas::PROGRAMS_SCHAMA_NAME;
 use crate::router::RouterClient;
 
 const MANIFEST_FILENAME: &str = "package.json";
-const TASK_FILENAME: &str = "program.wasm";
-const UI_FILENAME: &str = "index.html";
+const DEFAULT_PROGRAM_ENTRY_FILENAME: &str = "index.wasm";
+const HTML_INDEX_FILENAME: &str = "index.html";
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Manifest {
@@ -59,56 +58,94 @@ struct Manifest {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Program {
-    pub name: String,
-    pub hash: Hash,
-    pub data: Option<serde_json::Value>,
+    pub id: Uuid,
+    #[serde(rename = "createdAt")]
+    pub created_at: i64,
+    pub author: PublicKey,
+    pub content: HashOrContent,
+    pub manifest: Manifest,
+    pub html_index: Option<Hash>,
+    pub program_entry: Option<Hash>,
 }
 
-impl Program {
-    pub async fn load(router: &RouterClient, hash: Hash) -> Result<Self> {
-        let bytes = router.blobs().read_to_bytes(hash).await?;
-        let meta: Manifest = serde_json::from_slice(&bytes)?;
-        let data = serde_json::from_slice(&bytes)?;
+impl EventObject for Program {
+    async fn from_event(event: Event, client: &RouterClient) -> Result<Self> {
+        if event.kind != EventKind::MutateProgram {
+            anyhow::bail!("event is not a program mutation");
+        }
+
+        let id = event.data_id()?.ok_or_else(|| anyhow!("missing data id"))?;
+
+        // fetch collection content
+        let content_hash = match event.content {
+            HashOrContent::Hash(hash) => hash,
+            HashOrContent::Content(_) => anyhow::bail!("content must be a hash"),
+        };
+        let collection = client.blobs().get_collection(content_hash).await?;
+
+        // extract the manifest
+        let (_, manifest_hash) = collection
+            .iter()
+            .find(|item| item.0 == MANIFEST_FILENAME)
+            .ok_or_else(|| anyhow!("missing manifest"))?;
+        let data = client.blobs().read_to_bytes(*manifest_hash).await?;
+        let manifest: Manifest = serde_json::from_slice(&data)?;
+        let (html_index, program_entry) = Program::hash_pointers(&manifest, &collection)?;
 
         Ok(Program {
-            name: meta.name,
-            hash,
-            data: Some(data),
+            id,
+            created_at: event.created_at,
+            author: event.pubkey,
+            content: event.content,
+            manifest,
+            html_index,
+            program_entry,
         })
     }
 
-    pub fn validator(&self) -> Result<jsonschema::Validator> {
-        match &self.data {
-            Some(data) => jsonschema::validator_for(data).context("failed to create validator"),
-            None => Err(anyhow!("no validator found")),
+    fn into_mutate_event(&self, author: Author) -> Result<Event> {
+        // assert!(author.public_key() == self.author);
+        let tags = vec![Tag::new(NOSTR_ID_TAG, self.id.to_string().as_str())];
+        let content = match self.content {
+            HashOrContent::Hash(hash) => hash,
+            HashOrContent::Content(_) => anyhow::bail!("content must be a hash"),
+        };
+        Event::create(
+            author,
+            self.created_at,
+            EventKind::MutateProgram,
+            tags,
+            content,
+        )
+    }
+}
+
+impl Program {
+    fn hash_pointers(
+        manifest: &Manifest,
+        collection: &Collection,
+    ) -> Result<(Option<Hash>, Option<Hash>)> {
+        let entry_filename = manifest
+            .main
+            .clone()
+            .unwrap_or(String::from(DEFAULT_PROGRAM_ENTRY_FILENAME));
+
+        let mut html_index = None;
+        let mut program_entry = None;
+        for (name, hash) in collection.iter() {
+            if name == HTML_INDEX_FILENAME {
+                html_index = Some(*hash);
+            } else if name == entry_filename {
+                program_entry = Some(*hash);
+            }
         }
+        Ok((html_index, program_entry))
     }
 
-    pub fn id(&self) -> Result<Hash> {
-        let res = serde_json::to_string(self).map(|data| Hash::from_str(data.as_str()))??;
-        Ok(res)
+    async fn from_sql_row(row: &rusqlite::Row<'_>, client: &RouterClient) -> Result<Program> {
+        let event = Event::from_sql_row(row)?;
+        Self::from_event(event, client).await
     }
-
-    // async fn write_event(&self, author: Author, db: &DB) -> Result<()> {
-    //     let created_at = chrono::Utc::now().timestamp();
-    //     let content = self.name.clone().into();
-    //     let event = Event {
-    //         id: nostr_id(
-    //             PublicKey::from_bytes(author.public_key().as_bytes())?,
-    //             self.created_at,
-    //             EventKind::MutateProgram,
-    //             &vec![],
-    //             &content,
-    //         )?,
-    //         pubkey: self.pubkey.clone(),
-    //         created_at: self.created_at,
-    //         kind: EventKind::MutateProgram,
-    //         tags: vec![Tag(NOSTR_Program_TAG.to_string(), Program.to_string(), None)],
-    //         sig: "".to_string(),
-    //         content: HashOrContent::Content(content),
-    //     };
-    //     event.write(db).await
-    // }
 }
 
 #[derive(Clone)]
@@ -119,83 +156,59 @@ impl Programs {
         Programs(repo)
     }
 
-    // pub async fn create(&self, data: Bytes) -> Result<Program> {
-    //     // extract the title from the Program
-    //     let meta: ProgramMetadata = serde_json::from_slice(&data)?;
-
-    //     // confirm our data is a valid JSON Program
-    //     let Program = serde_json::from_slice(&data)?;
-    //     jsonschema::validator_for(&Program)?;
-
-    //     // serialize data & add locally
-    //     // TODO - test that this enforces field ordering
-    //     let serialized = serde_json::to_vec(&Program)?;
-
-    //     // TODO - should construct a HashSeq, place the new Program as the 1th element
-    //     // and update the metadata in 0th element
-    //     let res = self.0.router.blobs().add_bytes(serialized).await?;
-
-    //     Ok(Program {
-    //         title: meta.title,
-    //         hash: res.hash,
-    //         data: Some(Program),
-    //     })
-    // }
-
-    pub async fn bundle(&self, author: Author, path: impl Into<PathBuf>) -> Result<Program> {
+    pub async fn mutate(
+        &self,
+        author: Author,
+        id: Uuid,
+        path: impl Into<PathBuf>,
+    ) -> Result<Program> {
+        // assert this is a valid program directory
         let path: PathBuf = path.into().canonicalize()?;
-        anyhow::ensure!(path.exists(), "path {} does not exist", path.display());
         anyhow::ensure!(path.is_dir(), "path {} is not a directory", path.display());
-
         let manifest_path = path.join(MANIFEST_FILENAME);
-        let file = tokio::fs::File::open(manifest_path)
-            .await
-            .context("opening manifest file")?;
-        let mut manifest_reader = BufReader::new(file);
-        let manifest: Manifest =
-            serde_json::from_reader(manifest_reader).context("invalid manifest")?;
+        anyhow::ensure!(
+            manifest_path.exists(),
+            "path {} does not exist",
+            path.display()
+        );
 
+        // load manifest
+        let data: Vec<u8> = tokio::fs::read(&manifest_path).await?;
+        let manifest: Manifest = serde_json::from_slice(data.as_slice())?;
+
+        // create collection
         let result = import(self.0.router().blobs(), path).await?;
+        let (temp_tag, size, collection) = import(self.0.router.blobs(), path).await?;
+        let hash = *temp_tag.hash();
 
-        let programs_schema = self.0.schemas().get_by_name(PROGRAMS_SCHAMA_NAME).await?;
-        self.0.events().create(author, schema, data)
-
+        // build program
+        let (html_index, program_entry) = Program::hash_pointers(&manifest, &collection)?;
         let program = Program {
-            name: manifest.name,
-            hash: result.0.hash,
-            data: Some(serde_json::to_value(manifest)?),
+            id,
+            // TODO(b5) - wat. why? you're doing something wrong with types.
+            author: PublicKey::from_bytes(author.public_key().as_bytes())?,
+            created_at: chrono::Utc::now().timestamp(),
+            manifest,
+            content: HashOrContent::Hash(hash),
+            html_index,
+            program_entry,
         };
+
+        // write event
+        let event = program.into_mutate_event(author)?;
+        event.write(&self.0.db).await?;
+
         Ok(program)
     }
 
-    pub async fn load(&self, hash: Hash) -> Result<Program> {
-        Program::load(self.0.router(), hash).await
-    }
-
-    // pub async fn mutate(&self, _id: Hash, data: &str) -> Result<Hash> {
-    //     let Program = Program::new(data.to_string());
-    //     // TODO - should construct a HashSeq, place the new Program as the 1th element
-    //     // and update the metadata in 0th element
-    //     // Program.write(&self.db).await
-    //     Program.id()
-    // }
-
-    pub async fn get_by_name(&self, name: &str) -> Result<Program> {
-        // TODO - SLOW
-        self.list(0, -1)
-            .await?
-            .into_iter()
-            .find(|program| program.name == name)
-            .ok_or_else(|| anyhow!("Program not found"))
-    }
-
-    pub async fn get_by_hash(&self, hash: Hash) -> Result<Program> {
-        // TODO - SLOW
-        self.list(0, -1)
-            .await?
-            .into_iter()
-            .find(|program| program.hash.eq(&hash))
-            .ok_or_else(|| anyhow!("Program not found"))
+    pub async fn get_by_hash(&self, _hash: Hash) -> Result<Program> {
+        todo!("get_by_hash");
+        // // TODO - SLOW
+        // self.list(0, -1)
+        //     .await?
+        //     .into_iter()
+        //     .find(|program| program.content.eq(&hash))
+        //     .ok_or_else(|| anyhow!("Program not found"))
     }
 
     pub async fn list(&self, offset: i64, limit: i64) -> Result<Vec<Program>> {
@@ -207,23 +220,10 @@ impl Programs {
 
         let mut programs = Vec::new();
         while let Some(row) = rows.next()? {
-            let hash: String = row.get(0)?;
-            let hash = Hash::from_str(&hash)?;
-            match Program::load(self.0.router(), hash).await {
-                Ok(program) => {
-                    programs.push(Program);
-                }
-                Err(e) => {
-                    // TODO - what to do when we can't load Program data?
-                    tracing::error!(
-                        "failed to load Program for hash: {:?} {:?}",
-                        hash.to_string(),
-                        e
-                    );
-                }
-            }
+            let program = Program::from_sql_row(row, self.0.router()).await?;
+            programs.push(program);
         }
-        Ok(Programs)
+        Ok(programs)
     }
 }
 
@@ -373,7 +373,7 @@ async fn import(
         .filter_map(Result::transpose)
         .collect::<anyhow::Result<Vec<_>>>()?;
     let (send, recv) = async_channel::bounded(32);
-    let progress = iroh_blobs::util::progress::AsyncChannelProgressSender::new(send);
+    let progress = iroh::blobs::util::progress::AsyncChannelProgressSender::new(send);
     let show_progress = tokio::spawn(show_ingest_progress(recv));
     // import all the files, using num_cpus workers, return names and temp tags
     let mut names_and_tags = futures_lite::stream::iter(data_sources)
@@ -382,7 +382,7 @@ async fn import(
             let progress = progress.clone();
             async move {
                 let (temp_tag, file_size) = db
-                    .import_file(path, ImportMode::Copy, BlobFormat::Raw, progress)
+                    .add_from_path(path, ImportMode::Copy, BlobFormat::Raw, progress)
                     .await?;
                 anyhow::Ok((name, temp_tag, file_size))
             }

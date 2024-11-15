@@ -1,8 +1,10 @@
 use anyhow::{anyhow, Result};
+use ed25519_dalek::Signature;
 use iroh::blobs::Hash;
 use iroh::docs::Author;
 use iroh::net::key::PublicKey;
-use rusqlite::params;
+use rusqlite::types::{FromSql, ToSqlOutput};
+use rusqlite::{params, ToSql};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -10,18 +12,18 @@ use std::fmt;
 use std::str::FromStr;
 use uuid::Uuid;
 
+use crate::router::RouterClient;
+
 use super::db::DB;
-use super::Repo;
 
 const NOSTR_EVENT_VERSION_NUMBER: u32 = 0;
-const NOSTR_SCHEMA_TAG: &str = "sch";
-const NOSTR_ID_TAG: &str = "id";
+pub(crate) const NOSTR_SCHEMA_TAG: &str = "sch";
+pub(crate) const NOSTR_ID_TAG: &str = "id";
 
+#[derive(Debug, PartialEq, Copy, Clone)]
 pub enum EventKind {
     MutateAuthor,
     DeleteAuthor,
-    MutateCapability,
-    DeleteCapability,
     MutateProgram,
     DeleteProgram,
     MutateSchema,
@@ -37,17 +39,69 @@ impl EventKind {
         match self {
             EventKind::MutateAuthor => 100000,
             EventKind::DeleteAuthor => 100001,
-            EventKind::MutateCapability => 100002,
-            EventKind::DeleteCapability => 100003,
-            EventKind::MutateProgram => 100004,
-            EventKind::DeleteProgram => 100005,
-            EventKind::MutateSchema => 100006,
-            EventKind::DeleteSchema => 100007,
-            EventKind::MutateRow => 100008,
-            EventKind::DeleteRow => 100009,
+            EventKind::MutateProgram => 100002,
+            EventKind::DeleteProgram => 100003,
+            EventKind::MutateSchema => 100004,
+            EventKind::DeleteSchema => 100005,
+            EventKind::MutateRow => 100006,
+            EventKind::DeleteRow => 100007,
         }
     }
 }
+
+impl ToSql for EventKind {
+    fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
+        Ok(ToSqlOutput::from(self.kind()))
+    }
+}
+
+impl FromSql for EventKind {
+    fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
+        let kind = u32::column_result(value)?;
+        match kind {
+            100000 => Ok(EventKind::MutateAuthor),
+            100001 => Ok(EventKind::DeleteAuthor),
+            100002 => Ok(EventKind::MutateProgram),
+            100003 => Ok(EventKind::DeleteProgram),
+            100004 => Ok(EventKind::MutateSchema),
+            100005 => Ok(EventKind::DeleteSchema),
+            100006 => Ok(EventKind::MutateRow),
+            100007 => Ok(EventKind::DeleteRow),
+            _ => Err(rusqlite::types::FromSqlError::OutOfRange(kind)),
+        }
+    }
+}
+
+impl Serialize for EventKind {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        self.kind().serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for EventKind {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let kind = u32::deserialize(deserializer)?;
+        match kind {
+            100000 => Ok(EventKind::MutateAuthor),
+            100001 => Ok(EventKind::DeleteAuthor),
+            100002 => Ok(EventKind::MutateProgram),
+            100003 => Ok(EventKind::DeleteProgram),
+            100004 => Ok(EventKind::MutateSchema),
+            100005 => Ok(EventKind::DeleteSchema),
+            100006 => Ok(EventKind::MutateRow),
+            100007 => Ok(EventKind::DeleteRow),
+            _ => Err(serde::de::Error::custom(format!("Unknown event kind: {}", kind))),
+        }
+    }
+}
+
+
 
 /// A struct that wraps Sha256 digest and can be serialized/deserialized
 /// from a 32-byte lowercase-encoded hex string.
@@ -126,24 +180,6 @@ impl FromStr for Sha256Digest {
     }
 }
 
-pub(crate) fn nostr_id(
-    pubkey: PublicKey,
-    created_at: i64,
-    kind: u32,
-    tags: &Vec<Tag>,
-    content: &Hash,
-) -> Result<Sha256Digest> {
-    let data = serde_json::to_string(&(
-        NOSTR_EVENT_VERSION_NUMBER,
-        pubkey,
-        created_at,
-        kind,
-        tags,
-        content,
-    ))?;
-    Ok(Sha256Digest::from_data(data.as_bytes()))
-}
-
 #[derive(Debug, Serialize, Deserialize)]
 pub enum HashOrContent {
     Hash(Hash),
@@ -156,113 +192,152 @@ impl From<Hash> for HashOrContent {
     }
 }
 
+
 #[derive(Debug, Serialize, Deserialize)]
-pub struct Tag(String, String, Option<String>);
+pub(crate) struct Tag(String, String, Option<String>);
+
+impl Tag {
+    pub fn new(name: &str, value: &str) -> Self {
+        Tag(name.to_string(), value.to_string(), None)
+    }
+    pub fn new_with_hint(name: &str, value: &str, hint: &str) -> Self {
+        Tag(name.to_string(), value.to_string(), Some(hint.to_string()))
+    }
+}
+
+// {
+// "id": "4376c65d2f232afbe9b882a35baa4f6fe8667c4e684749af565f981833ed6a65",
+// "pubkey": "6e468422dfb74a5738702a8823b9b28168abab8655faacb6853cd0ee15deee93",
+// "created_at": 1673347337,
+// "kind": 1,
+// "content": "Walled gardens became prisons, and nostr is the first step towards tearing down the prison walls.",
+// "tags": [
+//     ["e", "3da979448d9ba263864c4d6f14984c423a3838364ec255f03c7904b1ae77f206"],
+//     ["p", "bf2376e17ba4ec269d10fcc996a4746b451152be9031fa48e74553dde5526bce"]
+// ],
+// "sig": "908a15e46fb4d8675bab026fc230a0e3542bfade63da02d542fb78b2a8513fcd0092619a2c8c1221e581946e0191f2af505dfdf8657a414dbca329186f009262"
+// }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Event {
     pub id: Sha256Digest,
-    pub pubkey: String,
+    pub pubkey: PublicKey,
     #[serde(rename = "createdAt")]
     pub created_at: i64,
-    pub kind: u32,
+    pub kind: EventKind,
     pub tags: Vec<Tag>,
-    pub sig: String,
+    pub sig: Signature,
     pub content: HashOrContent,
 }
 
 impl Event {
-    async fn mutate(
-        db: &DB,
-        author: Author,
-        schema: Hash,
-        id: Uuid,
-        content: Hash,
-    ) -> Result<Event> {
-        let created_at = chrono::Utc::now().timestamp();
-        let tags = vec![
-            Tag(NOSTR_SCHEMA_TAG.to_string(), schema.to_string(), None),
-            Tag(NOSTR_ID_TAG.to_string(), id.to_string(), None),
-        ];
-        let id = nostr_id(
-            // TODO - remove this fuckery
-            PublicKey::from_bytes(author.public_key().as_bytes())?,
-            created_at,
-            EventKind::MutateRow.kind(),
-            &tags,
-            &content,
-        )?;
-
+    pub(crate) fn create(author: Author, created_at: i64, kind: EventKind, tags: Vec<Tag>, content: Hash) -> Result<Event> {
+        // TODO(b5) - wat. why? you're doing something wrong with types.
+        let pubkey = PublicKey::from_bytes(author.public_key().as_bytes())?;
+        
+        let id = Self::nostr_id(pubkey, created_at, kind, &tags, &content)?;
         let sig = author.sign(id.as_bytes());
-        let event = Event {
+        Ok(Event {
             id,
-            pubkey: author.id().to_string(),
+            pubkey,
             created_at,
-            kind: EventKind::MutateRow.kind(),
+            kind,
             tags,
-            sig: hex::encode(sig.to_bytes()),
+            sig,
             content: content.into(),
-        };
-
-        event.write(db).await?;
-        Ok(event)
+        })
     }
 
-    fn schema_hash(&self) -> Result<Hash> {
+    pub(crate) fn nostr_id(
+        pubkey: PublicKey,
+        created_at: i64,
+        kind: EventKind,
+        tags: &Vec<Tag>,
+        content: &Hash,
+    ) -> Result<Sha256Digest> {
+        let data = serde_json::to_string(&(
+            NOSTR_EVENT_VERSION_NUMBER,
+            pubkey,
+            created_at,
+            kind,
+            tags,
+            content,
+        ))?;
+        Ok(Sha256Digest::from_data(data.as_bytes()))
+    }
+
+    pub(crate) fn schema(&self) -> Result<Option<Hash>> {
         let schema_tag = self
             .tags
             .iter()
-            .find(|tag| tag.0 == NOSTR_SCHEMA_TAG)
-            .ok_or_else(|| anyhow::anyhow!("No schema tag found"))?;
-        let hash = Hash::from_str(&schema_tag.1)?;
-        Ok(hash)
+            .find(|tag| tag.0 == NOSTR_SCHEMA_TAG);
+
+        match schema_tag {
+            Some(tag) => {
+                let hash = Hash::from_str(&tag.1)?;
+                Ok(Some(hash))
+            }
+            None => Ok(None),
+        }
     }
 
-    fn data_id(&self) -> Result<Uuid> {
+    pub(crate) fn data_id(&self) -> Result<Option<Uuid>> {
         let id_tag = self
             .tags
             .iter()
-            .find(|tag| tag.0 == NOSTR_ID_TAG)
-            .ok_or_else(|| anyhow::anyhow!("No id tag found"))?;
-        Uuid::parse_str(&id_tag.1).map_err(|e| anyhow::anyhow!(e))
+            .find(|tag| tag.0 == NOSTR_ID_TAG);
+
+        match id_tag  {
+            Some(tag) => {
+                let id = Uuid::parse_str(&tag.1).map_err(|e| anyhow::anyhow!(e))?;
+                Ok(Some(id))
+            }
+            None => Ok(None),
+        }
     }
 
+
     pub(crate) async fn write(&self, db: &DB) -> Result<()> {
-        let conn = db.lock().await;
-        let schema = self.schema_hash()?.to_string();
+        let schema = match self.schema()? {
+            Some(s) => Some(s.to_string()),
+            None => None,
+        };
         let data_id = self.data_id()?;
         let content = match self.content {
             HashOrContent::Hash(ref hash) => hash.to_string(),
-            HashOrContent::Content(ref data) => {
-                let data = serde_json::to_vec(data)?;
-                String::from_utf8(data)?
-            },
+            HashOrContent::Content(_) => anyhow::bail!("content must be a hash"),
         };
+
+        let conn = db.lock().await;
         conn.execute(
             "INSERT INTO events (id, pubkey, created_at, kind, schema, data_id, content, sig) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             params![
                 self.id.to_string(),
-                self.pubkey,
+                self.pubkey.to_string(),
                 self.created_at,
                 self.kind,
                 schema,
                 data_id, 
                 content,
-                self.sig
+                self.sig.to_string(),
             ],
         )?;
         Ok(())
     }
 
-    fn from_sql_row(row: &rusqlite::Row) -> Result<Self> {
+    pub(crate) fn from_sql_row(row: &rusqlite::Row) -> Result<Self> {
         // (0   1       2           3     4       5        6       7)
         // (id, pubkey, created_at, kind, schema, data_id, content, sig)
+        let pubkey = String::from(row.get(1)?);
+        let pubkey = PublicKey::from_str(&pubkey)?;
         let id: String = row.get(0)?;
         let content: String = row.get(6)?;
         let data_id: Uuid = row.get(5)?;
+        let data: [&u8] = row.get(7)?;
+        let sig = Signature::from_bytes(data).map_err(|e| anyhow!(e))?;
         Ok(Self {
             id: Sha256Digest::from_str(&id).map_err(|e| anyhow!(e))?,
-            pubkey: row.get(1)?,
+            pubkey,
             created_at: row.get(2)?,
             kind: row.get(3)?,
             tags: vec![
@@ -270,68 +345,14 @@ impl Event {
                 Tag(NOSTR_ID_TAG.to_string(), data_id.to_string(), None),
             ],
             content: Hash::from_str(&content)?.into(),
-            sig: row.get(6)?,
+            sig,
         })
     }
 }
 
-#[derive(Clone)]
-pub struct Events(Repo);
-
-impl Events {
-    pub fn new(repo: Repo) -> Self {
-        Events(repo)
-    }
-
-    pub async fn create(
-        &self,
-        author: Author,
-        schema: Hash,
-        data: impl Serialize,
-    ) -> Result<Event> {
-        let data_id = Uuid::new_v4();
-        self.mutate(author, schema, data_id, data).await
-    }
-
-    pub async fn mutate(
-        &self,
-        author: Author,
-        schema: Hash,
-        id: Uuid,
-        data: impl Serialize,
-    ) -> Result<Event> {
-        // TODO - validate data against schema
-        let data = serde_json::to_vec(&data)?;
-        let outcome = self.0.router.blobs().add_bytes(data).await?;
-        let content = outcome.hash;
-        Event::mutate(&self.0.db, author, schema, id, content).await
-        // TODO - write to data table
-    }
-
-    pub async fn query(
-        &self,
-        schema: Hash,
-        _query: String,
-        offset: i64,
-        limit: i64
-    ) -> Result<Vec<Event>> {
-        let conn = self.0.db.lock().await;
-        let mut stmt = conn.prepare("SELECT id, pubkey, created_at, kind, schema, data_id, content, sig FROM events WHERE schema = ?1 LIMIT ?2 OFFSET ?3")?;
-        let mut rows = stmt.query(params![schema.to_string(), limit, offset])?;
-        let mut events = Vec::new();
-        
-
-        while let Some(row) = rows.next()? {
-            let mut event = Event::from_sql_row(row)?;
-            let content_hash = match event.content {
-                HashOrContent::Hash(hash) => hash,
-                HashOrContent::Content(_) => panic!("must be a hash")
-            };
-            let content = self.0.router.blobs().read_to_bytes(content_hash).await?;
-            let content = serde_json::from_slice::<Value>(&content).map_err(|e| anyhow!(e))?;
-            event.content = HashOrContent::Content(content);
-            events.push(event);
-        }
-        Ok(events)
-    }
+// Define the EventObject trait
+pub trait EventObject {
+    async fn from_event(event: Event, client: &RouterClient) -> Result<Self>
+    where Self: Sized;
+    fn into_mutate_event(&self, author: Author) -> Result<Event>;
 }

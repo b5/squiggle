@@ -39,7 +39,7 @@ impl Repo {
         schemas::Schemas::new(self.clone())
     }
 
-    pub fn events(&self) -> events::Events {
-        events::Events::new(self.clone())
+    pub fn rows(&self) -> rows::Rows {
+        rows::Rows::new(self.clone())
     }
 }
