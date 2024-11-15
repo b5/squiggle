@@ -333,7 +333,7 @@ impl Event {
         let id: String = row.get(0)?;
         let content: String = row.get(6)?;
         let data_id: Uuid = row.get(5)?;
-        let data: [&u8] = row.get(7)?;
+        let data: Vec<[u8]> = row.get(7)?;
         let sig = Signature::from_bytes(data).map_err(|e| anyhow!(e))?;
         Ok(Self {
             id: Sha256Digest::from_str(&id).map_err(|e| anyhow!(e))?,

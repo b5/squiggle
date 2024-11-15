@@ -1,5 +1,3 @@
-use std::str::FromStr;
-
 use anyhow::{anyhow, Context, Result};
 use iroh::blobs::Hash;
 use iroh::docs::Author;
@@ -42,7 +40,7 @@ impl EventObject for Row {
                 let content = serde_json::from_slice::<Value>(&content).map_err(|e| anyhow!(e))?;
                 HashOrContent::Content(content)
             }
-            HashOrContent::Content(v) => v,
+            HashOrContent::Content(v) => HashOrContent::Content(v),
         };
 
         Ok(Row {
@@ -50,7 +48,7 @@ impl EventObject for Row {
             id,
             schema,
             created_at: event.created_at,
-            content: event.content,
+            content,
         })
     }
 
@@ -100,39 +98,13 @@ impl Rows {
         id: Uuid,
         data: serde_json::Value,
     ) -> Result<Row> {
-        // validate data
-        let schema = self
-            .0
+        self.0
             .schemas()
-            .load(schema_hash)
+            .get_by_hash(schema_hash)
             .await
-            .context("loading schema")?;
-        let validator = schema.validator().context("getting validator")?;
-        if let Err(e) = validator.validate(&data) {
-            return Err(anyhow!("validation error: {}", e.to_string()));
-        };
-
-        // add to iroh
-        let data = serde_json::to_vec(&data)?;
-        let outcome = self.0.router.blobs().add_bytes(data).await?;
-        let created_at = chrono::Utc::now().timestamp();
-        let hash = outcome.hash;
-
-        // construct row
-        let row = Row {
-            // TODO(b5) - wat. why? you're doing something wrong with types.
-            author: PublicKey::from_bytes(author.public_key().as_bytes())?,
-            id,
-            schema: schema_hash,
-            created_at,
-            content: HashOrContent::Hash(hash),
-        };
-
-        // write event
-        let event = row.into_mutate_event(author)?;
-        event.write(&self.0.db).await?;
-
-        Ok(row)
+            .context("loading schema")?
+            .mutate_row(&self.0.db, &self.0.router, author, id, data)
+            .await
     }
 
     pub async fn query(

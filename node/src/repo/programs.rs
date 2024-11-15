@@ -1,17 +1,9 @@
 use std::collections::BTreeMap;
-use std::fmt::{Display, Formatter};
 use std::path::{Component, Path, PathBuf};
-use std::str::FromStr;
-use std::sync::Arc;
-use std::time::Duration;
 
 use anyhow::{anyhow, Context, Result};
-use bytes::Bytes;
-use futures_buffered::BufferedStreamExt;
-use futures_lite::{future::Boxed, StreamExt};
-use indicatif::{
-    HumanBytes, HumanDuration, MultiProgress, ProgressBar, ProgressDrawTarget, ProgressStyle,
-};
+use futures_lite::StreamExt;
+use indicatif::{HumanBytes, MultiProgress, ProgressBar, ProgressDrawTarget, ProgressStyle};
 use iroh::blobs::Hash;
 use iroh::docs::Author;
 use iroh::net::key::PublicKey;

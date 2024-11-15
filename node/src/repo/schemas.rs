@@ -1,14 +1,19 @@
+use std::f32::consts::E;
 use std::str::FromStr;
 
 use anyhow::{anyhow, Context, Result};
 use bytes::Bytes;
 use iroh::blobs::Hash;
+use iroh::docs::Author;
+use iroh::net::key::PublicKey;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use uuid::Uuid;
 
-use super::Repo;
+use super::events::{Event, EventKind, EventObject, HashOrContent, Tag, NOSTR_ID_TAG};
+use super::rows::Row;
+use super::{Repo, DB};
 use crate::router::RouterClient;
-
-pub const PROGRAMS_SCHAMA_NAME: &str = "programs";
 
 #[derive(Debug, Serialize, Deserialize)]
 struct SchemaMetadata {
@@ -17,64 +22,144 @@ struct SchemaMetadata {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Schema {
+    pub id: Uuid,
+    #[serde(rename = "createdAt")]
+    pub created_at: i64,
+    pub author: PublicKey,
+    pub content: HashOrContent,
     pub title: String,
-    pub hash: Hash,
-    pub data: Option<serde_json::Value>,
 }
 
-impl Schema {
-    // pub async fn new(title: String, hash: Hash) -> Self {
-    //     Schema {
-    //         title,
-    //         hash,
-    //         data: None,
-    //     }
-    // }
+impl EventObject for Schema {
+    async fn from_event(event: Event, client: &RouterClient) -> Result<Self> {
+        if event.kind != EventKind::MutateSchema {
+            return Err(anyhow!("event is not a schema mutation"));
+        }
 
-    pub async fn load(router: &RouterClient, hash: Hash) -> Result<Self> {
-        let bytes = router.blobs().read_to_bytes(hash).await?;
-        let meta: SchemaMetadata = serde_json::from_slice(&bytes)?;
-        let data = serde_json::from_slice(&bytes)?;
+        // normalize tags
+        let id = event.data_id()?.ok_or_else(|| anyhow!("missing data id"))?;
+
+        // fetch content if necessary
+        // TODO(b5): I know the double serializing is terrible
+        let (content, title) = match event.content {
+            HashOrContent::Hash(hash) => {
+                let content = client.blobs().read_to_bytes(hash).await?;
+                let meta =
+                    serde_json::from_slice::<SchemaMetadata>(&content).map_err(|e| anyhow!(e))?;
+
+                let content = serde_json::from_slice::<Value>(&content).map_err(|e| anyhow!(e))?;
+                (HashOrContent::Content(content), meta.title)
+            }
+            HashOrContent::Content(v) => {
+                let data = serde_json::to_vec(v)?;
+                let meta =
+                    serde_json::from_slice::<SchemaMetadata>(&data).map_err(|e| anyhow!(e))?;
+                (HashOrContent::Content(v), meta.title)
+            }
+        };
 
         Ok(Schema {
-            title: meta.title,
-            hash,
-            data: Some(data),
+            author: event.pubkey,
+            id,
+            created_at: event.created_at,
+            content,
+            title,
         })
     }
 
-    pub fn validator(&self) -> Result<jsonschema::Validator> {
-        match &self.data {
-            Some(data) => jsonschema::validator_for(data).context("failed to create validator"),
-            None => Err(anyhow!("no validator found")),
+    fn into_mutate_event(&self, author: Author) -> Result<Event> {
+        // assert!(author.public_key() == self.author);
+        let tags = vec![Tag::new(NOSTR_ID_TAG, self.id.to_string().as_str())];
+        let content = match self.content {
+            HashOrContent::Hash(hash) => hash,
+            HashOrContent::Content(_) => anyhow::bail!("content must be a hash"),
+        };
+        Event::create(author, self.created_at, EventKind::MutateRow, tags, content)
+    }
+}
+
+impl Schema {
+    async fn from_sql_row(row: &rusqlite::Row<'_>, client: &RouterClient) -> Result<Schema> {
+        let event = Event::from_sql_row(row)?;
+        Self::from_event(event, client).await
+    }
+
+    // pub async fn load(router: &RouterClient, hash: Hash) -> Result<Self> {
+    //     let bytes = router.blobs().read_to_bytes(hash).await?;
+    //     let meta: SchemaMetadata = serde_json::from_slice(&bytes)?;
+    //     let data = serde_json::from_slice(&bytes)?;
+
+    //     Ok(Schema {
+    //         title: meta.title,
+    //         hash,
+    //         data: Some(data),
+    //     })
+    // }
+
+    // pub fn id(&self) -> Result<Hash> {
+    //     let res = serde_json::to_string(self).map(|data| Hash::from_str(data.as_str()))??;
+    //     Ok(res)
+    // }
+
+    pub async fn validator(&self, router: &RouterClient) -> Result<jsonschema::Validator> {
+        match &self.content {
+            HashOrContent::Content(data) => {
+                jsonschema::validator_for(data).context("failed to create validator")
+            }
+            HashOrContent::Hash(hash) => {
+                let bytes = router.blobs().read_to_bytes(*hash).await?;
+                let data = serde_json::from_slice(&bytes)?;
+                jsonschema::validator_for(&data).context("failed to create validator")
+            }
         }
     }
 
-    pub fn id(&self) -> Result<Hash> {
-        let res = serde_json::to_string(self).map(|data| Hash::from_str(data.as_str()))??;
-        Ok(res)
-    }
+    pub async fn mutate_row(
+        &self,
+        db: &DB,
+        router: &RouterClient,
+        author: Author,
+        id: Uuid,
+        data: serde_json::Value,
+    ) -> Result<Row> {
+        // validate data matches schema
+        let validator = self.validator(router).await.context("getting validator")?;
+        if let Err(e) = validator.validate(&data) {
+            return Err(anyhow!("validation error: {}", e.to_string()));
+        };
 
-    // async fn write_event(&self, author: Author, db: &DB) -> Result<()> {
-    //     let created_at = chrono::Utc::now().timestamp();
-    //     let content = self.name.clone().into();
-    //     let event = Event {
-    //         id: nostr_id(
-    //             PublicKey::from_bytes(author.public_key().as_bytes())?,
-    //             self.created_at,
-    //             EventKind::MutateSchema,
-    //             &vec![],
-    //             &content,
-    //         )?,
-    //         pubkey: self.pubkey.clone(),
-    //         created_at: self.created_at,
-    //         kind: EventKind::MutateSchema,
-    //         tags: vec![Tag(NOSTR_SCHEMA_TAG.to_string(), schema.to_string(), None)],
-    //         sig: "".to_string(),
-    //         content: HashOrContent::Content(content),
-    //     };
-    //     event.write(db).await
-    // }
+        // TODO - this is the downside of HashOrContent
+        let id = match self.content {
+            HashOrContent::Hash(hash) => hash,
+            HashOrContent::Content(v) => {
+                let data = serde_json::to_vec(&v)?;
+                let outcome = router.blobs().add_bytes(data).await?;
+                outcome.hash
+            }
+        };
+
+        // add to iroh
+        let data = serde_json::to_vec(&data)?;
+        let outcome = router.blobs().add_bytes(data).await?;
+        let created_at = chrono::Utc::now().timestamp();
+        let hash = outcome.hash;
+
+        // construct row
+        let row = Row {
+            // TODO(b5) - wat. why? you're doing something wrong with types.
+            author: PublicKey::from_bytes(author.public_key().as_bytes())?,
+            id,
+            schema: id,
+            created_at,
+            content: HashOrContent::Hash(hash),
+        };
+
+        // write event
+        let event = row.into_mutate_event(author)?;
+        event.write(db).await?;
+
+        Ok(row)
+    }
 }
 
 #[derive(Clone)]
@@ -85,7 +170,28 @@ impl Schemas {
         Schemas(repo)
     }
 
-    pub async fn create(&self, data: Bytes) -> Result<Schema> {
+    pub async fn load_or_create(&self, author: Author, data: Bytes) -> Result<Schema> {
+        let meta: SchemaMetadata = serde_json::from_slice(&data)?;
+
+        let schema = self.get_by_title(&meta.title).await;
+        match schema {
+            Ok(schema) => Ok(schema),
+            Err(_) => self.create(author, data).await,
+        }
+    }
+
+    pub async fn create(&self, author: Author, data: Bytes) -> Result<Schema> {
+        let id = Uuid::new_v4();
+        self.mutate(author, id, data).await
+    }
+
+    pub async fn mutate(&self, author: Author, id: Uuid, data: Bytes) -> Result<Schema> {
+        // let schema = Schema::new(data.to_string());
+        // TODO - should construct a HashSeq, place the new schema as the 1th element
+        // and update the metadata in 0th element
+        // schema.write(&self.db).await
+        // schema.id()
+
         // extract the title from the schema
         let meta: SchemaMetadata = serde_json::from_slice(&data)?;
 
@@ -101,49 +207,22 @@ impl Schemas {
         // and update the metadata in 0th element
         let res = self.0.router.blobs().add_bytes(serialized).await?;
 
-        Ok(Schema {
+        let schema = Schema {
+            id,
+            created_at: chrono::Utc::now().timestamp(),
             title: meta.title,
-            hash: res.hash,
-            data: Some(schema),
-        })
+            // TODO(b5) - wat. why? you're doing something wrong with types.
+            author: PublicKey::from_bytes(author.public_key().as_bytes())?,
+            content: HashOrContent::Hash(res.hash),
+        };
+
+        let event = schema.into_mutate_event(author)?;
+        event.write(&self.0.db).await?;
+
+        Ok(schema)
     }
 
-    pub async fn ensure_standard_schemas(&self) -> Result<()> {
-        let programs: &'static [u8] = include_bytes!("std_schemas/programs.json");
-        let programs = Bytes::from_static(programs);
-        let meta: SchemaMetadata = serde_json::from_slice(&data)?;
-        assert_eq!(meta.title, PROGRAMS_SCHAMA_NAME);
-
-        let schema = self.get_by_name(&meta.title).await;
-        match schema {
-            Ok(schema) => Ok(schema),
-            Err(_) => self.create(data).await,
-        }
-    }
-
-    pub async fn load_or_create(&self, data: Bytes) -> Result<Schema> {
-        let meta: SchemaMetadata = serde_json::from_slice(&data)?;
-
-        let schema = self.get_by_name(&meta.title).await;
-        match schema {
-            Ok(schema) => Ok(schema),
-            Err(_) => self.create(data).await,
-        }
-    }
-
-    pub async fn load(&self, hash: Hash) -> Result<Schema> {
-        Schema::load(self.0.router(), hash).await
-    }
-
-    // pub async fn mutate(&self, _id: Hash, data: &str) -> Result<Hash> {
-    //     let schema = Schema::new(data.to_string());
-    //     // TODO - should construct a HashSeq, place the new schema as the 1th element
-    //     // and update the metadata in 0th element
-    //     // schema.write(&self.db).await
-    //     schema.id()
-    // }
-
-    pub async fn get_by_name(&self, name: &str) -> Result<Schema> {
+    pub async fn get_by_title(&self, name: &str) -> Result<Schema> {
         // TODO - SLOW
         self.list(0, -1)
             .await?
@@ -154,37 +233,30 @@ impl Schemas {
 
     pub async fn get_by_hash(&self, hash: Hash) -> Result<Schema> {
         // TODO - SLOW
-        self.list(0, -1)
-            .await?
-            .into_iter()
-            .find(|schema| schema.hash.eq(&hash))
-            .ok_or_else(|| anyhow!("schema not found"))
+        let conn = self.0.db.lock().await;
+        let mut stmt = conn
+            .prepare("SELECT DISTINCT id, pubkey, created_at, kind, schema, data_id, content, sig FROM events WHERE schema = ?1")
+            .context("selecting schemas from events table")?;
+
+        let mut rows = stmt.query([hash.to_string()])?;
+        while let Some(row) = rows.next()? {
+            return Schema::from_sql_row(&row, &self.0.router()).await;
+        }
+
+        Err(anyhow!("schema not found"))
     }
 
     pub async fn list(&self, offset: i64, limit: i64) -> Result<Vec<Schema>> {
         let conn = self.0.db.lock().await;
         let mut stmt = conn
-            .prepare("SELECT DISTINCT schema FROM events LIMIT ?1 OFFSET ?2")
+            .prepare("SELECT DISTINCT id, pubkey, created_at, kind, schema, data_id, content, sig FROM events WHERE kind = ?1 LIMIT ?2 OFFSET ?3")
             .context("selecting schemas from events table")?;
-        let mut rows = stmt.query([limit, offset])?;
+        let mut rows = stmt.query([EventKind::MutateSchema, limit, offset])?;
 
         let mut schemas = Vec::new();
         while let Some(row) = rows.next()? {
-            let hash: String = row.get(0)?;
-            let hash = Hash::from_str(&hash)?;
-            match Schema::load(self.0.router(), hash).await {
-                Ok(schema) => {
-                    schemas.push(schema);
-                }
-                Err(e) => {
-                    // TODO - what to do when we can't load schema data?
-                    tracing::error!(
-                        "failed to load schema for hash: {:?} {:?}",
-                        hash.to_string(),
-                        e
-                    );
-                }
-            }
+            let schema = Schema::from_sql_row(row, &self.0.router()).await?;
+            schemas.push(schema);
         }
         Ok(schemas)
     }

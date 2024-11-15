@@ -45,25 +45,5 @@ pub(crate) async fn setup_db(db: &DB) -> Result<()> {
         [],
     )?;
 
-    // conn.execute(
-    //     "CREATE TABLE IF NOT EXISTS users (
-    //         pubkey BLOB NOT NULL,
-    //         privkey BLOB,
-    //         name TEXT,
-    //         about TEXT,
-    //         picture TEXT
-    //     )",
-    //     [],
-    // )?;
-
-    // conn.execute(
-    //     "CREATE TABLE IF NOT EXISTS data (
-    //         schema TEXT NOT NULL,
-    //         id TEXT PRIMARY KEY NOT NULL,
-    //         data TEXT NOT NULL
-    // )",
-    //     [],
-    // )?;
-
     Ok(())
 }
