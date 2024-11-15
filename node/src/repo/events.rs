@@ -18,8 +18,16 @@ const NOSTR_SCHEMA_TAG: &str = "sch";
 const NOSTR_ID_TAG: &str = "id";
 
 pub enum EventKind {
-    Mutate,
-    Delete,
+    MutateAuthor,
+    DeleteAuthor,
+    MutateCapability,
+    DeleteCapability,
+    MutateProgram,
+    DeleteProgram,
+    MutateSchema,
+    DeleteSchema,
+    MutateRow,
+    DeleteRow,
 }
 
 impl EventKind {
@@ -27,8 +35,16 @@ impl EventKind {
     // TODO(b5): random number placeholders for now
     pub fn kind(&self) -> u32 {
         match self {
-            EventKind::Mutate => 100000,
-            EventKind::Delete => 100001,
+            EventKind::MutateAuthor => 100000,
+            EventKind::DeleteAuthor => 100001,
+            EventKind::MutateCapability => 100002,
+            EventKind::DeleteCapability => 100003,
+            EventKind::MutateProgram => 100004,
+            EventKind::DeleteProgram => 100005,
+            EventKind::MutateSchema => 100006,
+            EventKind::DeleteSchema => 100007,
+            EventKind::MutateRow => 100008,
+            EventKind::DeleteRow => 100009,
         }
     }
 }
@@ -172,7 +188,7 @@ impl Event {
             // TODO - remove this fuckery
             PublicKey::from_bytes(author.public_key().as_bytes())?,
             created_at,
-            EventKind::Mutate.kind(),
+            EventKind::MutateRow.kind(),
             &tags,
             &content,
         )?;
@@ -182,7 +198,7 @@ impl Event {
             id,
             pubkey: author.id().to_string(),
             created_at,
-            kind: EventKind::Mutate.kind(),
+            kind: EventKind::MutateRow.kind(),
             tags,
             sig: hex::encode(sig.to_bytes()),
             content: content.into(),

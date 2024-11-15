@@ -8,6 +8,8 @@ use serde::{Deserialize, Serialize};
 use super::Repo;
 use crate::router::RouterClient;
 
+pub const PROGRAMS_SCHAMA_NAME: &str = "programs";
+
 #[derive(Debug, Serialize, Deserialize)]
 struct SchemaMetadata {
     title: String,
@@ -104,6 +106,19 @@ impl Schemas {
             hash: res.hash,
             data: Some(schema),
         })
+    }
+
+    pub async fn ensure_standard_schemas(&self) -> Result<()> {
+        let programs: &'static [u8] = include_bytes!("std_schemas/programs.json");
+        let programs = Bytes::from_static(programs);
+        let meta: SchemaMetadata = serde_json::from_slice(&data)?;
+        assert_eq!(meta.title, PROGRAMS_SCHAMA_NAME);
+
+        let schema = self.get_by_name(&meta.title).await;
+        match schema {
+            Ok(schema) => Ok(schema),
+            Err(_) => self.create(data).await,
+        }
     }
 
     pub async fn load_or_create(&self, data: Bytes) -> Result<Schema> {

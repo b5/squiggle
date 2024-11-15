@@ -1,0 +1,24 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "programs",
+  "type": "object",
+  "properties": {
+    "name": { "title": "name", "type": "string", "maxLength": 214 },
+    "version": { "title": "version", "type": "string" },
+    "description": { "title": "description", "type": "string" },
+    "author": { "title": "author", "type": "string" },
+    "license": { "title": "license", "type": "string" },
+    "repository": { "title": "repository", "type": "string" },
+    "homepage": { "title": "homepage", "type": "string" },
+    "bugs": { "title": "bugs", "type": "string" },
+    "keywords": { "title": "keywords", "type": "array", "items": { "type": "string" }},
+    "dependencies": { "title": "dependencies", "type": "object", "additionalProperties": { "type": "string" }},
+    "configuration": { "title": "configuration", "type": "object", "additionalProperties": { "type": "string" }},
+    "sources": { "title": "sources", "type": "array", "items": { "type": "string" }}
+  },
+  "required": [
+    "name", 
+    "version", 
+    "hash"
+  ]
+}

@@ -8,6 +8,8 @@ use crate::router::RouterClient;
 pub mod capabilities;
 mod db;
 pub mod events;
+pub mod programs;
+pub mod rows;
 pub mod schemas;
 pub mod users;
 

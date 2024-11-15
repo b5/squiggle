@@ -18,18 +18,21 @@ High Level Requirements:
 * [x] Mon Nov 11 - Schema Validate, Write, Create
 * [ ] Tue Nov 12 - UI Display Speedrun
   * [x] Paginate through schema Data
-  * [ ] List Programs
-  * [ ] Move App config to schema
     * [ ] Settings program
 * [ ] Wed Nov 13 - Everything is a program
   * [ ] program constructor function in repo
-    * [ ] node CLI command for building programs
-  * [ ] inline small amounts of content into events table in JSON format
+    * [x] node CLI command for building programs
+  * [x] become browser
 * [ ] Thu Nov 14 - Ticket-Based Share flow
+  * [ ] std schemas
+    * [ ] Move App config to schema
+    * [ ] 
+  * [ ] List Programs
   * [ ] Construct Blob of events
   * [ ] Add events from ticket
-  * [ ] Share Ticket
+  * [ ] Share Program via ticket
 * [ ] Fri Nov 15 - Demo for team
+  * [ ] inline small amounts of content into events table in JSON format 
 
 --
 Initial MVP Flow:
