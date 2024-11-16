@@ -103,7 +103,7 @@ impl Rows {
             .get_by_hash(schema_hash)
             .await
             .context("loading schema")?
-            .mutate_row(&self.0.db, &self.0.router, author, id, data)
+            .mutate_row(&self.0, author, id, data)
             .await
     }
 

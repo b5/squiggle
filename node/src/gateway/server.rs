@@ -15,13 +15,12 @@ use axum::{
 use bytes::Bytes;
 use derive_more::Deref;
 use iroh::{
-    base::ticket::BlobTicket,
     blobs::{
         format::collection::Collection,
         get::fsm::{BlobContentNext, ConnectedNext, DecodeError, EndBlobNext},
         protocol::{RangeSpecSeq, ALPN},
         store::bao_tree::{io::fsm::BaoContentItem, ChunkNum},
-        BlobFormat, Hash,
+        Hash,
     },
     net::{discovery::dns::DnsDiscovery, Endpoint, NodeAddr},
 };
@@ -251,18 +250,6 @@ async fn get_mime_type(
     Ok(sm)
 }
 
-/// Handle a request for a range of bytes from the default node.
-async fn handle_local_blob_request(
-    gateway: Extension<Gateway>,
-    Path(blake3_hash): Path<Hash>,
-    req: Request<Body>,
-) -> std::result::Result<Response<Body>, AppError> {
-    let connection = gateway.get_default_connection().await?;
-    let byte_range = parse_byte_range(req).await?;
-    let res = forward_range(&gateway, connection, &blake3_hash, None, byte_range).await?;
-    Ok(res)
-}
-
 async fn handle_local_collection_index(
     gateway: Extension<Gateway>,
     Path(hash): Path<Hash>,
@@ -286,45 +273,45 @@ async fn handle_local_collection_request(
     Ok(res)
 }
 
-async fn handle_ticket_index(
-    gateway: Extension<Gateway>,
-    Path(ticket): Path<BlobTicket>,
-    req: Request<Body>,
-) -> std::result::Result<impl IntoResponse, AppError> {
-    tracing::info!("handle_ticket_index");
-    let byte_range = parse_byte_range(req).await?;
-    let connection = gateway
-        .endpoint
-        .connect(ticket.node_addr().clone(), ALPN)
-        .await?;
-    let hash = ticket.hash();
-    let prefix = format!("/ticket/{}", ticket);
-    let res = match ticket.format() {
-        BlobFormat::Raw => forward_range(&gateway, connection, &hash, None, byte_range)
-            .await?
-            .into_response(),
-        BlobFormat::HashSeq => collection_index(&gateway, connection, &hash, &prefix)
-            .await?
-            .into_response(),
-    };
-    Ok(res)
-}
+// async fn handle_ticket_index(
+//     gateway: Extension<Gateway>,
+//     Path(ticket): Path<BlobTicket>,
+//     req: Request<Body>,
+// ) -> std::result::Result<impl IntoResponse, AppError> {
+//     tracing::info!("handle_ticket_index");
+//     let byte_range = parse_byte_range(req).await?;
+//     let connection = gateway
+//         .endpoint
+//         .connect(ticket.node_addr().clone(), ALPN)
+//         .await?;
+//     let hash = ticket.hash();
+//     let prefix = format!("/ticket/{}", ticket);
+//     let res = match ticket.format() {
+//         BlobFormat::Raw => forward_range(&gateway, connection, &hash, None, byte_range)
+//             .await?
+//             .into_response(),
+//         BlobFormat::HashSeq => collection_index(&gateway, connection, &hash, &prefix)
+//             .await?
+//             .into_response(),
+//     };
+//     Ok(res)
+// }
 
-async fn handle_ticket_request(
-    gateway: Extension<Gateway>,
-    Path((ticket, suffix)): Path<(BlobTicket, String)>,
-    req: Request<Body>,
-) -> std::result::Result<impl IntoResponse, AppError> {
-    tracing::info!("handle_ticket_request");
-    let byte_range = parse_byte_range(req).await?;
-    let connection = gateway
-        .endpoint
-        .connect(ticket.node_addr().clone(), ALPN)
-        .await?;
-    let hash = ticket.hash();
-    let res = forward_collection_range(&gateway, connection, &hash, &suffix, byte_range).await?;
-    Ok(res)
-}
+// async fn handle_ticket_request(
+//     gateway: Extension<Gateway>,
+//     Path((ticket, suffix)): Path<(BlobTicket, String)>,
+//     req: Request<Body>,
+// ) -> std::result::Result<impl IntoResponse, AppError> {
+//     tracing::info!("handle_ticket_request");
+//     let byte_range = parse_byte_range(req).await?;
+//     let connection = gateway
+//         .endpoint
+//         .connect(ticket.node_addr().clone(), ALPN)
+//         .await?;
+//     let hash = ticket.hash();
+//     let res = forward_collection_range(&gateway, connection, &hash, &suffix, byte_range).await?;
+//     Ok(res)
+// }
 
 async fn collection_index(
     gateway: &Gateway,

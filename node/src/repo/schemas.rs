@@ -1,6 +1,3 @@
-use std::f32::consts::E;
-use std::str::FromStr;
-
 use anyhow::{anyhow, Context, Result};
 use bytes::Bytes;
 use iroh::blobs::Hash;
@@ -12,7 +9,7 @@ use uuid::Uuid;
 
 use super::events::{Event, EventKind, EventObject, HashOrContent, Tag, NOSTR_ID_TAG};
 use super::rows::Row;
-use super::{Repo, DB};
+use super::Repo;
 use crate::router::RouterClient;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -51,7 +48,7 @@ impl EventObject for Schema {
                 (HashOrContent::Content(content), meta.title)
             }
             HashOrContent::Content(v) => {
-                let data = serde_json::to_vec(v)?;
+                let data = serde_json::to_vec(&v)?;
                 let meta =
                     serde_json::from_slice::<SchemaMetadata>(&data).map_err(|e| anyhow!(e))?;
                 (HashOrContent::Content(v), meta.title)
@@ -114,33 +111,45 @@ impl Schema {
         }
     }
 
+    pub async fn create_row(
+        &self,
+        repo: &Repo,
+        author: Author,
+        data: serde_json::Value,
+    ) -> Result<Row> {
+        let id = Uuid::new_v4();
+        self.mutate_row(repo, author, id, data).await
+    }
+
     pub async fn mutate_row(
         &self,
-        db: &DB,
-        router: &RouterClient,
+        repo: &Repo,
         author: Author,
         id: Uuid,
         data: serde_json::Value,
     ) -> Result<Row> {
         // validate data matches schema
-        let validator = self.validator(router).await.context("getting validator")?;
+        let validator = self
+            .validator(&repo.router)
+            .await
+            .context("getting validator")?;
         if let Err(e) = validator.validate(&data) {
             return Err(anyhow!("validation error: {}", e.to_string()));
         };
 
         // TODO - this is the downside of HashOrContent
-        let id = match self.content {
+        let schema_hash = match self.content {
             HashOrContent::Hash(hash) => hash,
-            HashOrContent::Content(v) => {
-                let data = serde_json::to_vec(&v)?;
-                let outcome = router.blobs().add_bytes(data).await?;
+            HashOrContent::Content(ref v) => {
+                let data = serde_json::to_vec(v)?;
+                let outcome = repo.router.blobs().add_bytes(data).await?;
                 outcome.hash
             }
         };
 
         // add to iroh
         let data = serde_json::to_vec(&data)?;
-        let outcome = router.blobs().add_bytes(data).await?;
+        let outcome = repo.router.blobs().add_bytes(data).await?;
         let created_at = chrono::Utc::now().timestamp();
         let hash = outcome.hash;
 
@@ -149,14 +158,14 @@ impl Schema {
             // TODO(b5) - wat. why? you're doing something wrong with types.
             author: PublicKey::from_bytes(author.public_key().as_bytes())?,
             id,
-            schema: id,
+            schema: schema_hash,
             created_at,
             content: HashOrContent::Hash(hash),
         };
 
         // write event
         let event = row.into_mutate_event(author)?;
-        event.write(db).await?;
+        event.write(&repo.db).await?;
 
         Ok(row)
     }
@@ -251,7 +260,7 @@ impl Schemas {
         let mut stmt = conn
             .prepare("SELECT DISTINCT id, pubkey, created_at, kind, schema, data_id, content, sig FROM events WHERE kind = ?1 LIMIT ?2 OFFSET ?3")
             .context("selecting schemas from events table")?;
-        let mut rows = stmt.query([EventKind::MutateSchema, limit, offset])?;
+        let mut rows = stmt.query(rusqlite::params![EventKind::MutateSchema, limit, offset])?;
 
         let mut schemas = Vec::new();
         while let Some(row) = rows.next()? {

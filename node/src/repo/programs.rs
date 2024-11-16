@@ -1,33 +1,16 @@
-use std::collections::BTreeMap;
 use std::path::{Component, Path, PathBuf};
 
 use anyhow::{anyhow, Context, Result};
+use futures_buffered::BufferedStreamExt;
 use futures_lite::StreamExt;
-use indicatif::{HumanBytes, MultiProgress, ProgressBar, ProgressDrawTarget, ProgressStyle};
+use iroh::blobs::format::collection::Collection;
+use iroh::blobs::util::SetTagOption;
 use iroh::blobs::Hash;
+use iroh::client::blobs::WrapOption;
 use iroh::docs::Author;
 use iroh::net::key::PublicKey;
-use iroh_base::{node_addr::AddrInfoOptions, ticket::BlobTicket};
-use iroh_blobs::{
-    format::collection::Collection,
-    get::{
-        db::DownloadProgress,
-        fsm::{AtBlobHeaderNextError, DecodeError},
-        request::get_hash_seq_and_sizes,
-    },
-    provider::{self, handle_connection, CustomEventSender, EventSender},
-    store::{ExportMode, ImportMode, ImportProgress, ReadableStore, Store},
-    util::local_pool::LocalPool,
-    BlobFormat, Hash, HashAndFormat, TempTag,
-};
-use iroh_net::{
-    key::SecretKey,
-    relay::{RelayMap, RelayMode, RelayUrl},
-    Endpoint,
-};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use walkdir::WalkDir;
 
 use super::events::{Event, EventKind, EventObject, HashOrContent, Tag, NOSTR_ID_TAG};
 use super::Repo;
@@ -38,7 +21,7 @@ const DEFAULT_PROGRAM_ENTRY_FILENAME: &str = "index.wasm";
 const HTML_INDEX_FILENAME: &str = "index.html";
 
 #[derive(Debug, Serialize, Deserialize)]
-struct Manifest {
+pub struct Manifest {
     name: String,
     version: String,
     description: Option<String>,
@@ -127,7 +110,7 @@ impl Program {
         for (name, hash) in collection.iter() {
             if name == HTML_INDEX_FILENAME {
                 html_index = Some(*hash);
-            } else if name == entry_filename {
+            } else if *name == entry_filename {
                 program_entry = Some(*hash);
             }
         }
@@ -169,9 +152,7 @@ impl Programs {
         let manifest: Manifest = serde_json::from_slice(data.as_slice())?;
 
         // create collection
-        let result = import(self.0.router().blobs(), path).await?;
-        let (temp_tag, size, collection) = import(self.0.router.blobs(), path).await?;
-        let hash = *temp_tag.hash();
+        let (hash, _size, collection) = import(self.0.router().blobs(), path).await?;
 
         // build program
         let (html_index, program_entry) = Program::hash_pointers(&manifest, &collection)?;
@@ -219,14 +200,6 @@ impl Programs {
     }
 }
 
-fn validate_path_component(component: &str) -> anyhow::Result<()> {
-    anyhow::ensure!(
-        !component.contains('/'),
-        "path components must not contain the only correct path separator, /"
-    );
-    Ok(())
-}
-
 /// This function converts an already canonicalized path to a string.
 ///
 /// If `must_be_relative` is true, the function will fail if any component of the path is
@@ -272,67 +245,28 @@ pub fn canonicalized_path_to_string(
     Ok(path_str)
 }
 
-pub async fn show_ingest_progress(
-    recv: async_channel::Receiver<ImportProgress>,
-) -> anyhow::Result<()> {
-    let mp = MultiProgress::new();
-    mp.set_draw_target(ProgressDrawTarget::stderr());
-    let op = mp.add(ProgressBar::hidden());
-    op.set_style(
-        ProgressStyle::default_spinner().template("{spinner:.green} [{elapsed_precise}] {msg}")?,
-    );
-    // op.set_message(format!("{} Ingesting ...\n", style("[1/2]").bold().dim()));
-    // op.set_length(total_files);
-    let mut names = BTreeMap::new();
-    let mut sizes = BTreeMap::new();
-    let mut pbs = BTreeMap::new();
-    loop {
-        let event = recv.recv().await;
-        match event {
-            Ok(ImportProgress::Found { id, name }) => {
-                names.insert(id, name);
-            }
-            Ok(ImportProgress::Size { id, size }) => {
-                sizes.insert(id, size);
-                let total_size = sizes.values().sum::<u64>();
-                op.set_message(format!(
-                    "{} Ingesting {} files, {}\n",
-                    style("[1/2]").bold().dim(),
-                    sizes.len(),
-                    HumanBytes(total_size)
-                ));
-                let name = names.get(&id).cloned().unwrap_or_default();
-                let pb = mp.add(ProgressBar::hidden());
-                pb.set_style(ProgressStyle::with_template(
-                  "{msg}{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {bytes}/{total_bytes}",
-              )?.progress_chars("#>-"));
-                pb.set_message(format!("{} {}", style("[2/2]").bold().dim(), name));
-                pb.set_length(size);
-                pbs.insert(id, pb);
-            }
-            Ok(ImportProgress::OutboardProgress { id, offset }) => {
-                if let Some(pb) = pbs.get(&id) {
-                    pb.set_position(offset);
-                }
-            }
-            Ok(ImportProgress::OutboardDone { id, .. }) => {
-                // you are not guaranteed to get any OutboardProgress
-                if let Some(pb) = pbs.remove(&id) {
-                    pb.finish_and_clear();
-                }
-            }
-            Ok(ImportProgress::CopyProgress { .. }) => {
-                // we are not copying anything
-            }
-            Err(e) => {
-                op.set_message(format!("Error receiving progress: {e}"));
-                break;
-            }
-        }
-    }
-    op.finish_and_clear();
-    Ok(())
-}
+// based on https://docs.npmjs.com/cli/v10/configuring-npm/package-json#files
+// exanded for rust things
+// const IGNORE_PATTERNS: &[&str] = &[
+//     "*.orig",
+//     ".*.swp",
+//     ".DS_Store",
+//     "._*",
+//     ".git",
+//     ".hg",
+//     ".lock-wscript",
+//     ".npmrc",
+//     ".svn",
+//     ".wafpickle-N",
+//     "CVS",
+//     "config.gypi",
+//     "node_modules",
+//     "target",
+//     "npm-debug.log",
+//     "package-lock.json",
+//     "pnpm-lock.yaml",
+//     "yarn.lock",
+// ];
 
 /// Import from a file or directory into the database.
 ///
@@ -344,19 +278,23 @@ pub async fn show_ingest_progress(
 async fn import(
     db: &iroh::client::blobs::Client,
     path: PathBuf,
-) -> anyhow::Result<(TempTag, u64, Collection)> {
+) -> anyhow::Result<(Hash, u64, Collection)> {
     let root = path.clone();
     // walkdir also works for files, so we don't need to special case them
-    let files = WalkDir::new(path.clone()).into_iter();
+    let files = ignore::WalkBuilder::new(path.clone())
+        .standard_filters(true)
+        .follow_links(false)
+        .build();
+    // TODO(b5): finish
+    // for pattern in IGNORE_PATTERNS {
+    //     builder = builder.add_custom_ignore_filename(pattern);
+    // }
+
     // flatten the directory structure into a list of (name, path) pairs.
     // ignore symlinks.
     let data_sources: Vec<(String, PathBuf)> = files
         .map(|entry| {
             let entry = entry?;
-            if !entry.file_type().is_file() {
-                // Skip symlinks. Directories are handled by WalkDir.
-                return Ok(None);
-            }
             let path = entry.into_path();
             let relative = path.strip_prefix(&root)?;
             let name = canonicalized_path_to_string(relative, true)?;
@@ -364,19 +302,18 @@ async fn import(
         })
         .filter_map(Result::transpose)
         .collect::<anyhow::Result<Vec<_>>>()?;
-    let (send, recv) = async_channel::bounded(32);
-    let progress = iroh::blobs::util::progress::AsyncChannelProgressSender::new(send);
-    let show_progress = tokio::spawn(show_ingest_progress(recv));
+
     // import all the files, using num_cpus workers, return names and temp tags
     let mut names_and_tags = futures_lite::stream::iter(data_sources)
         .map(|(name, path)| {
             let db = db.clone();
-            let progress = progress.clone();
             async move {
-                let (temp_tag, file_size) = db
-                    .add_from_path(path, ImportMode::Copy, BlobFormat::Raw, progress)
+                let result = db
+                    .add_from_path(path, false, SetTagOption::Auto, WrapOption::NoWrap)
+                    .await?
+                    .finish()
                     .await?;
-                anyhow::Ok((name, temp_tag, file_size))
+                anyhow::Ok((name, result))
             }
         })
         .buffered_unordered(num_cpus::get())
@@ -384,20 +321,22 @@ async fn import(
         .await
         .into_iter()
         .collect::<anyhow::Result<Vec<_>>>()?;
-    drop(progress);
-    names_and_tags.sort_by(|(a, _, _), (b, _, _)| a.cmp(b));
+
+    names_and_tags.sort_by(|(a, _), (b, _)| a.cmp(b));
     // total size of all files
-    let size = names_and_tags.iter().map(|(_, _, size)| *size).sum::<u64>();
+    let size = names_and_tags
+        .iter()
+        .map(|(_, result)| result.size)
+        .sum::<u64>();
     // collect the (name, hash) tuples into a collection
     // we must also keep the tags around so the data does not get gced.
-    let (collection, tags) = names_and_tags
+    let (collection, tags_to_delete) = names_and_tags
         .into_iter()
-        .map(|(name, tag, _)| ((name, *tag.hash()), tag))
+        .map(|(name, result)| ((name, result.hash), result.tag))
         .unzip::<_, _, Collection, Vec<_>>();
-    let temp_tag = collection.clone().store(&db).await?;
-    // now that the collection is stored, we can drop the tags
-    // data is protected by the collection
-    drop(tags);
-    show_progress.await??;
-    Ok((temp_tag, size, collection))
+    let (hash, _tag) = db
+        .create_collection(collection.clone(), SetTagOption::Auto, tags_to_delete)
+        .await?;
+
+    Ok((hash, size, collection))
 }

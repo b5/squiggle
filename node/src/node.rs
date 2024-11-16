@@ -28,7 +28,6 @@ impl Node {
         router.authors().import(author.clone()).await?;
 
         let repo = Repo::open(router.client().clone(), &path).await?;
-        repo.schemas().ensure_standard_schemas().await?;
 
         let vm = VM::new(repo.clone(), &path).await?;
 

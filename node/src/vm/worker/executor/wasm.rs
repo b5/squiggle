@@ -38,6 +38,7 @@ impl Executor for WasmExecutor {
         ctx: &crate::vm::job::JobContext,
         job: Self::Job,
     ) -> Result<Self::Report> {
+        debug!("executing job: {:?}. context: {:?}", job, ctx.id);
         let downloads_path = ctx.downloads_path(&self.root);
         let uploads_path = ctx.uploads_path(&self.root);
         tokio::fs::create_dir_all(&downloads_path).await?;
@@ -139,10 +140,11 @@ host_fn!(schema_load_or_create(ctx: WasmContext; data: String) -> Vec<u8> {
     let ctx = ctx.get()?;
     let ctx = ctx.lock().unwrap();
     let schemas = ctx.repo.schemas();
+    let author = ctx.author.clone();
 
     tokio::task::block_in_place(|| {
         ctx.rt.block_on(async move {
-            let schema = schemas.load_or_create(data.into()).await.context("failed to load or create schema")?;
+            let schema = schemas.load_or_create(author, data.into()).await.context("failed to load or create schema")?;
             serde_json::to_vec(&schema).context("failed to serialize schema")
         })
     })
@@ -154,20 +156,21 @@ host_fn!(event_create(ctx: WasmContext; schema: String, data: String) -> Vec<u8>
 
     let schema_hash = Hash::from_str(schema.as_str()).context("invalid schema hash")?;
     let author = ctx.author.clone();
-    let events = ctx.repo.events();
-    let schemas = ctx.repo.schemas();
+    let repo = ctx.repo.clone();
 
     tokio::task::block_in_place(|| {
         ctx.rt.block_on(async move {
-            let schema = schemas.load(schema_hash).await.context("loading schema")?;
-            let validator = schema.validator().context("getting validator")?;
+            let router = repo.router();
+
+            let schema = repo.schemas().get_by_hash(schema_hash).await.context("loading schema")?;
+            let validator = schema.validator(&router).await.context("getting validator")?;
             let parsed = serde_json::from_str::<serde_json::Value>(&data).context("parsing JSON")?;
             if let Err(e) = validator.validate(&parsed) {
                 return Err(anyhow!("validation error: {}", e.to_string()));
             };
 
-            let event = events.create(author, schema.hash, data).await.context("failed to created event")?;
-            serde_json::to_vec(&event).context("failed to serialize event")
+            let row = schema.create_row(&repo, author, parsed).await.context("failed to created row")?;
+            serde_json::to_vec(&row).context("failed to serialize event")
         })
     })
 });
@@ -180,11 +183,12 @@ host_fn!(event_mutate(ctx: WasmContext; schema: String, id: String, data: String
     let schema = Hash::from_str(schema.as_str()).map_err(|_| anyhow!("invalid schema hash"))?;
     let id = Uuid::parse_str(id.clone().as_str()).map_err(|_| anyhow!("invalid id"))?;
     let author = ctx.author.clone();
-    let events = ctx.repo.events();
+    let rows = ctx.repo.rows();
 
     tokio::task::block_in_place(|| {
         ctx.rt.block_on(async move {
-            let event = events.mutate(author, schema, id, data).await?;
+            let data = serde_json::from_str::<serde_json::Value>(data.as_str()).map_err(|e| anyhow!("failed to parse data: {}", e))?;
+            let event = rows.mutate(author, schema, id, data).await?;
             let data = serde_json::to_vec(&event).map_err(|e| anyhow!("failed to serialize event: {}", e))?;
             data.to_bytes()
         })
@@ -196,11 +200,11 @@ host_fn!(event_query(ctx: WasmContext; schema: String, query: String) -> Vec<u8>
     let ctx = ctx.lock().unwrap();
 
     let schema = Hash::from_str(schema.as_str()).map_err(|_| anyhow!("invalid schema hash"))?;
-    let events = ctx.repo.events().clone();
+    let rows = ctx.repo.rows().clone();
 
     tokio::task::block_in_place(|| {
         ctx.rt.block_on(async move {
-            let res = events.query(schema, query, 0, -1).await?;
+            let res = rows.query(schema, query, 0, -1).await?;
             let data = serde_json::to_vec(&res).map_err(|e| anyhow!("failed to serialize events: {}", e))?;
             data.to_bytes()
         })

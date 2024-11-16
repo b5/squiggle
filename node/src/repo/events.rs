@@ -67,7 +67,7 @@ impl FromSql for EventKind {
             100005 => Ok(EventKind::DeleteSchema),
             100006 => Ok(EventKind::MutateRow),
             100007 => Ok(EventKind::DeleteRow),
-            _ => Err(rusqlite::types::FromSqlError::OutOfRange(kind)),
+            _ => Err(rusqlite::types::FromSqlError::OutOfRange(kind.into())),
         }
     }
 }
@@ -200,9 +200,6 @@ impl Tag {
     pub fn new(name: &str, value: &str) -> Self {
         Tag(name.to_string(), value.to_string(), None)
     }
-    pub fn new_with_hint(name: &str, value: &str, hint: &str) -> Self {
-        Tag(name.to_string(), value.to_string(), Some(hint.to_string()))
-    }
 }
 
 // {
@@ -219,7 +216,7 @@ impl Tag {
 // }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct Event {
+pub(crate) struct Event {
     pub id: Sha256Digest,
     pub pubkey: PublicKey,
     #[serde(rename = "createdAt")]
@@ -328,13 +325,16 @@ impl Event {
     pub(crate) fn from_sql_row(row: &rusqlite::Row) -> Result<Self> {
         // (0   1       2           3     4       5        6       7)
         // (id, pubkey, created_at, kind, schema, data_id, content, sig)
-        let pubkey = String::from(row.get(1)?);
+        let pubkey: String = row.get(1)?;
         let pubkey = PublicKey::from_str(&pubkey)?;
         let id: String = row.get(0)?;
         let content: String = row.get(6)?;
         let data_id: Uuid = row.get(5)?;
-        let data: Vec<[u8]> = row.get(7)?;
-        let sig = Signature::from_bytes(data).map_err(|e| anyhow!(e))?;
+        let sig_data: Vec<u8> = row.get(7)?;
+        let sig_data: [u8; 64] = sig_data
+        .try_into()
+        .map_err(|_| anyhow!("invalid signature data"))?;
+        let sig = Signature::from_bytes(&sig_data);
         Ok(Self {
             id: Sha256Digest::from_str(&id).map_err(|e| anyhow!(e))?,
             pubkey,
@@ -351,7 +351,7 @@ impl Event {
 }
 
 // Define the EventObject trait
-pub trait EventObject {
+pub(crate) trait EventObject {
     async fn from_event(event: Event, client: &RouterClient) -> Result<Self>
     where Self: Sized;
     fn into_mutate_event(&self, author: Author) -> Result<Event>;
