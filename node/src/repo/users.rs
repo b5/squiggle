@@ -1,49 +1,126 @@
-use anyhow::Result;
-use ed25519_dalek::{SigningKey, VerifyingKey};
+use anyhow::{anyhow, Result};
 use futures::StreamExt;
-use iroh::docs::AuthorId;
-use rand::prelude::SliceRandom;
-use rand::rngs::OsRng;
+use iroh::blobs::Hash;
+use iroh::docs::{Author, AuthorId};
+use iroh::net::key::PublicKey;
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
-use super::db::DB;
+use crate::router::RouterClient;
+
+use super::events::{Event, EventKind, EventObject, HashOrContent, Tag, NOSTR_ID_TAG};
 use super::Repo;
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct Profile {
+    name: String,
+    description: String,
+    picture: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct User {
-    pub pub_key: VerifyingKey,
-    pub priv_key: Option<SigningKey>,
-    pub name: String,
-    pub about: String,
-    pub picture: String,
+    pub id: Uuid,
+    pub created_at: i64,
+    pub pubkey: PublicKey,
+    pub content: Hash,
+    pub blankame: String,
+    pub author: Option<Author>,
+    pub profile: Option<Profile>,
+}
+
+impl EventObject for User {
+    async fn from_event(event: Event, router: &RouterClient) -> Result<Self> {
+        if event.kind != EventKind::MutateUser {
+            return Err(anyhow!("event is not a user mutation"));
+        }
+
+        // normalize tags
+        let id = event.data_id()?.ok_or_else(|| anyhow!("missing data id"))?;
+
+        // fetch content if necessary
+        let (hash, profile) = match event.content {
+            HashOrContent::Hash(hash) => {
+                let profile = match router.blobs().read_to_bytes(hash).await {
+                    Ok(content) => {
+                        let profile: Profile =
+                            serde_json::from_slice(&content).map_err(|e| anyhow!(e))?;
+                        Some(profile)
+                    }
+                    // TODO(b5) - we only want to return None if the hash is not found
+                    Err(_) => None,
+                };
+                (hash, profile)
+            }
+            HashOrContent::Content(_) => anyhow::bail!("content must be a hash"),
+        };
+
+        let author = AuthorId::from(event.pubkey.as_bytes());
+        let author = match router.authors().export(author).await {
+            Ok(author) => author,
+            Err(_) => None,
+        };
+
+        Ok(User {
+            id,
+            pubkey: event.pubkey,
+            created_at: event.created_at,
+            content: hash,
+            blankame: get_blankname(event.pubkey),
+            profile,
+            author,
+        })
+    }
+
+    fn into_mutate_event(&self, author: Author) -> Result<Event> {
+        // assert!(author.public_key() == self.author);
+        let tags = vec![Tag::new(NOSTR_ID_TAG, self.id.to_string().as_str())];
+        Event::create(
+            author,
+            self.created_at,
+            EventKind::MutateUser,
+            tags,
+            self.content,
+        )
+    }
 }
 
 impl User {
-    pub(crate) async fn create(
-        db: &DB,
-        name: String,
-        about: String,
-        picture: String,
-    ) -> Result<User> {
-        let conn = db.lock().await;
+    async fn from_sql_row(row: &rusqlite::Row<'_>, client: &RouterClient) -> Result<User> {
+        let event = Event::from_sql_row(row)?;
+        Self::from_event(event, client).await
+    }
 
-        let mut cspring = OsRng;
-        let signing_key = SigningKey::generate(&mut cspring);
-        let pub_key = signing_key.verifying_key();
-        let priv_key = signing_key.to_bytes();
+    pub async fn create(repo: &Repo, profile: Profile) -> Result<User> {
+        let id = Uuid::new_v4();
+        let author_id = repo.router().authors().create().await?;
+        let author = repo
+            .router()
+            .authors()
+            .export(author_id)
+            .await?
+            .expect("just created author to exist");
 
-        conn.execute(
-            "INSERT INTO users (pubkey, privkey, name, about, picture) VALUES (?1, ?2, ?3, ?4, ?5)",
-            params![pub_key.to_bytes(), &priv_key, &name, &about, &picture],
-        )?;
-        Ok(User {
-            pub_key,
-            priv_key: Some(signing_key),
-            name,
-            about,
-            picture,
-        })
+        // add profile to store
+        let content = serde_json::to_vec(&profile)?;
+        let result = repo.router.blobs().add_bytes(content).await?;
+
+        // TODO(b5) - wat. why? you're doing something wrong with types.
+        let pubkey = PublicKey::from_bytes(author.public_key().as_bytes())?;
+
+        let user = Self {
+            id,
+            pubkey,
+            created_at: chrono::Utc::now().timestamp(),
+            content: result.hash,
+            profile: Some(profile),
+            blankame: get_blankname(pubkey),
+            author: Some(author.clone()),
+        };
+
+        user.into_mutate_event(author)?.write(&repo.db).await?;
+        Ok(user)
     }
 }
 
@@ -54,8 +131,19 @@ impl Users {
         Users(repo)
     }
 
-    pub async fn create(&self, name: String, about: String, picture: String) -> Result<User> {
-        User::create(&self.0.db, name, about, picture).await
+    pub async fn create(&self, profile: Profile) -> Result<User> {
+        User::create(&self.0, profile).await
+    }
+
+    pub async fn mutate(&self, mut user: User) -> Result<User> {
+        let author = user
+            .author
+            .clone()
+            .ok_or_else(|| anyhow!("missing author"))?;
+        user.created_at = chrono::Utc::now().timestamp();
+        let event = user.into_mutate_event(author)?;
+        event.write(&self.0.db).await?;
+        Ok(user)
     }
 
     pub async fn authors(&self) -> Result<Vec<AuthorId>> {
@@ -68,25 +156,15 @@ impl Users {
         Ok(authors)
     }
 
-    pub async fn list(&self) -> Result<Vec<User>> {
+    pub async fn list(&self, offset: i64, limit: i64) -> Result<Vec<User>> {
         let conn = self.0.db.lock().await;
-        let mut stmt = conn.prepare("SELECT pubkey, privkey, name, about, picture FROM users")?;
-        let rows = stmt.query_map([], |row| {
-            let pub_key =
-                VerifyingKey::from_bytes(&row.get::<_, [u8; 32]>(0)?).expect("Invalid public key");
-            Ok(User {
-                pub_key,
-                // priv_key: Some(SigningKey::from_bytes(&row.get::<_, Vec<u8>>(2))?),
-                priv_key: None,
-                name: row.get(2)?,
-                about: row.get(3)?,
-                picture: row.get(4)?,
-            })
-        })?;
+        let mut stmt = conn.prepare("SELECT id, pubkey, created_at, kind, schema, data_id, content, sig FROM events WHERE kind = ?1 LIMIT ?2 OFFSET ?3")?;
+        let mut rows = stmt.query(params![EventKind::MutateUser, limit, offset])?;
 
         let mut users = Vec::new();
-        for user in rows {
-            users.push(user?);
+        while let Some(row) = rows.next()? {
+            let user = User::from_sql_row(row, &self.0.router).await?;
+            users.push(user);
         }
 
         Ok(users)
@@ -94,15 +172,17 @@ impl Users {
 }
 
 // TODO: have this accept a hash & use the hash to deterministically generate a name
-pub fn generate_name() -> String {
+fn get_blankname(key: PublicKey) -> String {
+    let bytes = key.as_bytes();
     let adjectives = get_adjectives();
+    let colors = get_color_names();
     let animals = get_animal_names();
-    let mut rng = rand::thread_rng();
-    format!(
-        "{}_{}",
-        adjectives.choose(&mut rng).unwrap(),
-        animals.choose(&mut rng).unwrap()
-    )
+
+    let adjective = adjectives[bytes[0] as usize % adjectives.len()];
+    let color = colors[bytes[1] as usize % colors.len()];
+    let animal = animals[bytes[2] as usize % animals.len()];
+
+    format!("{}_{}_{}", adjective, color, animal)
 }
 
 fn get_adjectives() -> Vec<&'static str> {
@@ -110,6 +190,41 @@ fn get_adjectives() -> Vec<&'static str> {
         "quick", "lazy", "sleepy", "noisy", "hungry", "happy", "sad", "angry", "brave", "calm",
         "eager", "fierce", "gentle", "jolly", "kind", "lively", "merry", "nice", "proud", "silly",
         "witty", "zealous", "bright", "dark", "shiny", "dull", "smooth", "rough", "soft", "hard",
+    ]
+}
+
+fn get_color_names() -> Vec<&'static str> {
+    vec![
+        "red",
+        "blue",
+        "green",
+        "yellow",
+        "purple",
+        "orange",
+        "pink",
+        "brown",
+        "black",
+        "white",
+        "gray",
+        "cyan",
+        "magenta",
+        "lime",
+        "indigo",
+        "violet",
+        "gold",
+        "silver",
+        "bronze",
+        "teal",
+        "navy",
+        "maroon",
+        "olive",
+        "coral",
+        "peach",
+        "mint",
+        "lavender",
+        "beige",
+        "turquoise",
+        "salmon",
     ]
 }
 

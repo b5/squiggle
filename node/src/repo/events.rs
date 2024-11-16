@@ -22,8 +22,8 @@ pub(crate) const NOSTR_ID_TAG: &str = "id";
 
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub enum EventKind {
-    MutateAuthor,
-    DeleteAuthor,
+    MutateUser,
+    DeleteUser,
     MutateProgram,
     DeleteProgram,
     MutateSchema,
@@ -37,8 +37,8 @@ impl EventKind {
     // TODO(b5): random number placeholders for now
     pub fn kind(&self) -> u32 {
         match self {
-            EventKind::MutateAuthor => 100000,
-            EventKind::DeleteAuthor => 100001,
+            EventKind::MutateUser => 100000,
+            EventKind::DeleteUser => 100001,
             EventKind::MutateProgram => 100002,
             EventKind::DeleteProgram => 100003,
             EventKind::MutateSchema => 100004,
@@ -59,8 +59,8 @@ impl FromSql for EventKind {
     fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
         let kind = u32::column_result(value)?;
         match kind {
-            100000 => Ok(EventKind::MutateAuthor),
-            100001 => Ok(EventKind::DeleteAuthor),
+            100000 => Ok(EventKind::MutateUser),
+            100001 => Ok(EventKind::DeleteUser),
             100002 => Ok(EventKind::MutateProgram),
             100003 => Ok(EventKind::DeleteProgram),
             100004 => Ok(EventKind::MutateSchema),
@@ -88,8 +88,8 @@ impl<'de> Deserialize<'de> for EventKind {
     {
         let kind = u32::deserialize(deserializer)?;
         match kind {
-            100000 => Ok(EventKind::MutateAuthor),
-            100001 => Ok(EventKind::DeleteAuthor),
+            100000 => Ok(EventKind::MutateUser),
+            100001 => Ok(EventKind::DeleteUser),
             100002 => Ok(EventKind::MutateProgram),
             100003 => Ok(EventKind::DeleteProgram),
             100004 => Ok(EventKind::MutateSchema),

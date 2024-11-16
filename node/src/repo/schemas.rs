@@ -248,8 +248,8 @@ impl Schemas {
             .context("selecting schemas from events table")?;
 
         let mut rows = stmt.query([hash.to_string()])?;
-        while let Some(row) = rows.next()? {
-            return Schema::from_sql_row(&row, &self.0.router()).await;
+        if let Some(row) = rows.next()? {
+            return Schema::from_sql_row(row, self.0.router()).await;
         }
 
         Err(anyhow!("schema not found"))
@@ -264,7 +264,7 @@ impl Schemas {
 
         let mut schemas = Vec::new();
         while let Some(row) = rows.next()? {
-            let schema = Schema::from_sql_row(row, &self.0.router()).await?;
+            let schema = Schema::from_sql_row(row, self.0.router()).await?;
             schemas.push(schema);
         }
         Ok(schemas)
