@@ -11,6 +11,7 @@ pub mod events;
 pub mod programs;
 pub mod rows;
 pub mod schemas;
+pub mod tickets;
 pub mod users;
 
 #[derive(Debug, Clone)]

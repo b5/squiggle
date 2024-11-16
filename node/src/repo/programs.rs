@@ -9,10 +9,14 @@ use iroh::blobs::Hash;
 use iroh::client::blobs::WrapOption;
 use iroh::docs::Author;
 use iroh::net::key::PublicKey;
+use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use super::events::{Event, EventKind, EventObject, HashOrContent, Tag, NOSTR_ID_TAG};
+use super::events::{
+    Event, EventKind, EventObject, HashOrContent, Tag, EVENT_SQL_FIELDS, NOSTR_ID_TAG,
+};
+use super::tickets::ProgramTicket;
 use super::Repo;
 use crate::router::RouterClient;
 
@@ -174,6 +178,92 @@ impl Programs {
         Ok(program)
     }
 
+    pub async fn share(&self, id: Uuid) -> Result<ProgramTicket> {
+        let router = self.0.router();
+        // get the raw event, write it to the store
+        let program_event = Event::read_raw(&self.0.db, id).await?;
+        let program_collection_hash = match program_event.content {
+            HashOrContent::Hash(hash) => hash,
+            HashOrContent::Content(_) => anyhow::bail!("content must be a hash"),
+        };
+        let (program_event_hash, program_event_tag) =
+            program_event.write_raw_to_blob(router).await?;
+
+        // TODO - get profile information for the user, add to collection
+
+        let head = vec![(String::from("event"), program_event_hash)];
+
+        // get collection contents
+        let program_collection = router
+            .blobs()
+            .get_collection(program_collection_hash)
+            .await?;
+
+        // create our collection contents
+        let collection =
+            Collection::from_iter(head.into_iter().chain(program_collection.into_iter()));
+
+        let (hash, _) = router
+            .blobs()
+            .create_collection(collection, SetTagOption::Auto, vec![program_event_tag])
+            .await?;
+
+        // get our dialing information
+        let mut addr = self.0.router().net().node_addr().await?;
+        addr.apply_options(iroh::base::node_addr::AddrInfoOptions::Id);
+
+        // create ticket
+        ProgramTicket::new(addr, hash, iroh::blobs::BlobFormat::HashSeq)
+    }
+
+    pub async fn download(&self, ticket: ProgramTicket) -> Result<Program> {
+        let router = self.0.router();
+        let addr = ticket.node_addr().clone();
+        // fetch the blob
+        router
+            .blobs()
+            .download(ticket.hash(), addr)
+            .await?
+            .finish()
+            .await?;
+
+        let mut collection = router
+            .blobs()
+            .get_collection(ticket.hash())
+            .await?
+            .into_iter();
+
+        // ingest the program event
+        let (_, hash) = collection
+            .next()
+            .ok_or_else(|| anyhow!("empty collection"))?;
+        let event = Event::ingest_from_blob(&self.0.db, router, hash).await?;
+
+        // consume the rest of the collection, adding as a new collection to re-surface the progra
+        // pacakge root hash in our local repo
+        let collection = Collection::from_iter(collection);
+        router
+            .blobs()
+            .create_collection(collection, SetTagOption::Auto, vec![])
+            .await?;
+
+        Program::from_event(event, router).await
+    }
+
+    pub async fn get_by_id(&self, id: Uuid) -> Result<Program> {
+        let conn = self.0.db.lock().await;
+        let mut stmt = conn
+            .prepare("SELECT () FROM events WHERE id = ?1")
+            .context("selecting Program by id from events table")?;
+        let mut rows = stmt.query([id])?;
+
+        if let Some(row) = rows.next()? {
+            Program::from_sql_row(row, self.0.router()).await
+        } else {
+            Err(anyhow!("Program not found"))
+        }
+    }
+
     pub async fn get_by_hash(&self, _hash: Hash) -> Result<Program> {
         todo!("get_by_hash");
         // // TODO - SLOW
@@ -187,9 +277,14 @@ impl Programs {
     pub async fn list(&self, offset: i64, limit: i64) -> Result<Vec<Program>> {
         let conn = self.0.db.lock().await;
         let mut stmt = conn
-            .prepare("SELECT DISTINCT Program FROM events LIMIT ?1 OFFSET ?2")
+            .prepare(
+                format!(
+                    "SELECT ${EVENT_SQL_FIELDS} FROM events WHERE kind = ?1 LIMIT ?2 OFFSET ?3"
+                )
+                .as_str(),
+            )
             .context("selecting Programs from events table")?;
-        let mut rows = stmt.query([limit, offset])?;
+        let mut rows = stmt.query(params![EventKind::MutateProgram, limit, offset])?;
 
         let mut programs = Vec::new();
         while let Some(row) = rows.next()? {

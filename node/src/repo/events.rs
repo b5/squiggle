@@ -20,6 +20,9 @@ const NOSTR_EVENT_VERSION_NUMBER: u32 = 0;
 pub(crate) const NOSTR_SCHEMA_TAG: &str = "sch";
 pub(crate) const NOSTR_ID_TAG: &str = "id";
 
+pub(crate) const EVENT_SQL_FIELDS: &str =
+    "id, pubkey, created_at, kind, schema, data_id, content, sig";
+
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub enum EventKind {
     MutateUser,
@@ -96,12 +99,13 @@ impl<'de> Deserialize<'de> for EventKind {
             100005 => Ok(EventKind::DeleteSchema),
             100006 => Ok(EventKind::MutateRow),
             100007 => Ok(EventKind::DeleteRow),
-            _ => Err(serde::de::Error::custom(format!("Unknown event kind: {}", kind))),
+            _ => Err(serde::de::Error::custom(format!(
+                "Unknown event kind: {}",
+                kind
+            ))),
         }
     }
 }
-
-
 
 /// A struct that wraps Sha256 digest and can be serialized/deserialized
 /// from a 32-byte lowercase-encoded hex string.
@@ -192,7 +196,6 @@ impl From<Hash> for HashOrContent {
     }
 }
 
-
 #[derive(Debug, Serialize, Deserialize)]
 pub(crate) struct Tag(String, String, Option<String>);
 
@@ -228,10 +231,16 @@ pub(crate) struct Event {
 }
 
 impl Event {
-    pub(crate) fn create(author: Author, created_at: i64, kind: EventKind, tags: Vec<Tag>, content: Hash) -> Result<Event> {
+    pub(crate) fn create(
+        author: Author,
+        created_at: i64,
+        kind: EventKind,
+        tags: Vec<Tag>,
+        content: Hash,
+    ) -> Result<Event> {
         // TODO(b5) - wat. why? you're doing something wrong with types.
         let pubkey = PublicKey::from_bytes(author.public_key().as_bytes())?;
-        
+
         let id = Self::nostr_id(pubkey, created_at, kind, &tags, &content)?;
         let sig = author.sign(id.as_bytes());
         Ok(Event {
@@ -245,7 +254,42 @@ impl Event {
         })
     }
 
-    pub(crate) fn nostr_id(
+    /// read a raw event, usually not what you want. Worth preferring higher-level reads like
+    /// programs, schemas, etc.
+    pub(crate) async fn read_raw(db: &DB, id: Uuid) -> Result<Self> {
+        let conn = db.lock().await;
+        let mut stmt = conn.prepare(
+            "SELECT ${EVENT_SQL_FIELDS} FROM events WHERE id = ?1 ORDER BY CREATED DESC",
+        )?;
+        // TODO(b5) - use query_row with mapping func
+        let mut rows = stmt.query(params![id])?;
+        let row = rows.next()?.ok_or_else(|| anyhow!("event not found"))?;
+        Event::from_sql_row(row)
+    }
+
+    pub(crate) async fn ingest_from_blob(
+        db: &DB,
+        router: &RouterClient,
+        hash: Hash,
+    ) -> Result<Self> {
+        let data = router.blobs().read_to_bytes(hash).await?;
+        let event: Self = serde_json::from_slice(&data)?;
+        event.write(db).await?;
+        Ok(event)
+    }
+
+    /// write a raw event to a blob, again usually not what you want. Events are stored in the
+    /// sqlite db. This is for when we want to share events with others.
+    pub(crate) async fn write_raw_to_blob(
+        &self,
+        router: &RouterClient,
+    ) -> Result<(Hash, iroh::blobs::Tag)> {
+        let data = serde_json::to_vec(&self)?;
+        let result = router.blobs().add_bytes(data).await?;
+        Ok((result.hash, result.tag))
+    }
+
+    fn nostr_id(
         pubkey: PublicKey,
         created_at: i64,
         kind: EventKind,
@@ -264,10 +308,7 @@ impl Event {
     }
 
     pub(crate) fn schema(&self) -> Result<Option<Hash>> {
-        let schema_tag = self
-            .tags
-            .iter()
-            .find(|tag| tag.0 == NOSTR_SCHEMA_TAG);
+        let schema_tag = self.tags.iter().find(|tag| tag.0 == NOSTR_SCHEMA_TAG);
 
         match schema_tag {
             Some(tag) => {
@@ -279,12 +320,9 @@ impl Event {
     }
 
     pub(crate) fn data_id(&self) -> Result<Option<Uuid>> {
-        let id_tag = self
-            .tags
-            .iter()
-            .find(|tag| tag.0 == NOSTR_ID_TAG);
+        let id_tag = self.tags.iter().find(|tag| tag.0 == NOSTR_ID_TAG);
 
-        match id_tag  {
+        match id_tag {
             Some(tag) => {
                 let id = Uuid::parse_str(&tag.1).map_err(|e| anyhow::anyhow!(e))?;
                 Ok(Some(id))
@@ -292,7 +330,6 @@ impl Event {
             None => Ok(None),
         }
     }
-
 
     pub(crate) async fn write(&self, db: &DB) -> Result<()> {
         let schema = match self.schema()? {
@@ -307,14 +344,17 @@ impl Event {
 
         let conn = db.lock().await;
         conn.execute(
-            "INSERT INTO events (id, pubkey, created_at, kind, schema, data_id, content, sig) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            format!(
+                "INSERT INTO events (${EVENT_SQL_FIELDS}) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)"
+            )
+            .as_str(),
             params![
                 self.id.to_string(),
                 self.pubkey.to_string(),
                 self.created_at,
                 self.kind,
                 schema,
-                data_id, 
+                data_id,
                 content,
                 self.sig.to_string(),
             ],
@@ -332,8 +372,8 @@ impl Event {
         let data_id: Uuid = row.get(5)?;
         let sig_data: Vec<u8> = row.get(7)?;
         let sig_data: [u8; 64] = sig_data
-        .try_into()
-        .map_err(|_| anyhow!("invalid signature data"))?;
+            .try_into()
+            .map_err(|_| anyhow!("invalid signature data"))?;
         let sig = Signature::from_bytes(&sig_data);
         Ok(Self {
             id: Sha256Digest::from_str(&id).map_err(|e| anyhow!(e))?,
@@ -353,6 +393,7 @@ impl Event {
 // Define the EventObject trait
 pub(crate) trait EventObject {
     async fn from_event(event: Event, client: &RouterClient) -> Result<Self>
-    where Self: Sized;
+    where
+        Self: Sized;
     fn into_mutate_event(&self, author: Author) -> Result<Event>;
 }

@@ -37,6 +37,7 @@ mime = "0.3.17"
 mime_classifier = "0.0.1"
 mime_guess = "2.0.4"
 num_cpus = "1.16.0"
+postcard = "1.0.10"
 rand = "0.8.5"
 range-collections = "0.4.5"
 rusqlite = { version = "0.32.1", features = ["uuid"] }
