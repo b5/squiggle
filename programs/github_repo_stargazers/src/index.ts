@@ -66,6 +66,7 @@ function fetchAllStargazers(db: DB, org: string, repo: string, token: string) {
 
       const user = fetchUserPage(stargazer.login, token);
       const entry = userEntry(user);
+      log(`adding entry for user ${stargazer.login}`);
       db.addEntry(db.githubUsersSchema(), entry);
     }
 
@@ -178,8 +179,7 @@ export function main() {
   const { org, repo, token } = config();
 
   let schema = loadOrCreateSchema(githubUsersSchema);
-  log(`Schema loaded: ${JSON.stringify(schema)}`);
-  log(`Schema loaded: ${schema.title} ${schema.content.Hash}`);
+  log(`Schema loaded: ${schema.title} ${schema.content.hash}`);
 
   // build a db shim
   const db = {

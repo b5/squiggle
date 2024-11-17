@@ -3,6 +3,7 @@ use bytes::Bytes;
 use iroh::blobs::Hash;
 use iroh::docs::Author;
 use iroh::net::key::PublicKey;
+use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
@@ -234,10 +235,13 @@ impl Schemas {
         // TODO - SLOW
         let conn = self.0.db.lock().await;
         let mut stmt = conn
-            .prepare(format!("SELECT {EVENT_SQL_FIELDS} FROM events WHERE schema = ?1").as_str())
+            .prepare(
+                format!("SELECT {EVENT_SQL_FIELDS} FROM events WHERE kind = ?1 AND content = ?2")
+                    .as_str(),
+            )
             .context("selecting schemas from events table")?;
 
-        let mut rows = stmt.query([hash.to_string()])?;
+        let mut rows = stmt.query(params![EventKind::MutateSchema, hash.to_string()])?;
         if let Some(row) = rows.next()? {
             return Schema::from_sql_row(row, self.0.router()).await;
         }

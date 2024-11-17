@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use ed25519_dalek::Signature;
 use iroh::blobs::Hash;
 use iroh::docs::Author;
@@ -429,7 +429,8 @@ impl Event {
                 self.content.hash.to_string(),
                 self.sig.to_bytes(),
             ],
-        )?;
+        )
+        .context("inserting event")?;
         Ok(())
     }
 

@@ -156,18 +156,11 @@ host_fn!(event_create(ctx: WasmContext; schema: String, data: String) -> Vec<u8>
     let schema_hash = Hash::from_str(schema.as_str()).context("invalid schema hash")?;
     let author = ctx.author.clone();
     let repo = ctx.repo.clone();
+    let parsed = serde_json::from_str::<serde_json::Value>(&data).context("parsing JSON")?;
 
     tokio::task::block_in_place(|| {
         ctx.rt.block_on(async move {
-            repo.schemas().list(0, -1).await?.into_iter().for_each(|s| println!("{:?}", s));
-
             let mut schema = repo.schemas().get_by_hash(schema_hash).await.context("loading schema")?;
-            // let validator = schema.validator(router).await.context("getting validator")?;
-            let parsed = serde_json::from_str::<serde_json::Value>(&data).context("parsing JSON")?;
-            // if let Err(e) = validator.validate(&parsed) {
-            //     return Err(anyhow!("validation error: {}", e.to_string()));
-            // };
-
             let row = schema.create_row(&repo, author, parsed).await.context("failed to created row")?;
             serde_json::to_vec(&row).context("failed to serialize event")
         })
