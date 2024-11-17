@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
 
-use super::events::{Event, EventKind, EventObject, HashOrContent, Tag, NOSTR_ID_TAG};
+use super::events::{Event, EventKind, EventObject, Link, Tag, EVENT_SQL_FIELDS, NOSTR_ID_TAG};
 use super::rows::Row;
 use super::Repo;
 use crate::router::RouterClient;
@@ -23,7 +23,7 @@ pub struct Schema {
     #[serde(rename = "createdAt")]
     pub created_at: i64,
     pub author: PublicKey,
-    pub content: HashOrContent,
+    pub content: Link,
     pub title: String,
 }
 
@@ -39,19 +39,19 @@ impl EventObject for Schema {
         // fetch content if necessary
         // TODO(b5): I know the double serializing is terrible
         let (content, title) = match event.content {
-            HashOrContent::Hash(hash) => {
+            Link::Hash(hash) => {
                 let content = client.blobs().read_to_bytes(hash).await?;
                 let meta =
                     serde_json::from_slice::<SchemaMetadata>(&content).map_err(|e| anyhow!(e))?;
 
                 let content = serde_json::from_slice::<Value>(&content).map_err(|e| anyhow!(e))?;
-                (HashOrContent::Content(content), meta.title)
+                (Link::Content(content), meta.title)
             }
-            HashOrContent::Content(v) => {
+            Link::Content(v) => {
                 let data = serde_json::to_vec(&v)?;
                 let meta =
                     serde_json::from_slice::<SchemaMetadata>(&data).map_err(|e| anyhow!(e))?;
-                (HashOrContent::Content(v), meta.title)
+                (Link::Content(v), meta.title)
             }
         };
 
@@ -68,10 +68,16 @@ impl EventObject for Schema {
         // assert!(author.public_key() == self.author);
         let tags = vec![Tag::new(NOSTR_ID_TAG, self.id.to_string().as_str())];
         let content = match self.content {
-            HashOrContent::Hash(hash) => hash,
-            HashOrContent::Content(_) => anyhow::bail!("content must be a hash"),
+            Link::Hash(hash) => hash,
+            Link::Content(_) => anyhow::bail!("content must be a hash"),
         };
-        Event::create(author, self.created_at, EventKind::MutateRow, tags, content)
+        Event::create(
+            author,
+            self.created_at,
+            EventKind::MutateSchema,
+            tags,
+            content,
+        )
     }
 }
 
@@ -100,10 +106,10 @@ impl Schema {
 
     pub async fn validator(&self, router: &RouterClient) -> Result<jsonschema::Validator> {
         match &self.content {
-            HashOrContent::Content(data) => {
+            Link::Content(data) => {
                 jsonschema::validator_for(data).context("failed to create validator")
             }
-            HashOrContent::Hash(hash) => {
+            Link::Hash(hash) => {
                 let bytes = router.blobs().read_to_bytes(*hash).await?;
                 let data = serde_json::from_slice(&bytes)?;
                 jsonschema::validator_for(&data).context("failed to create validator")
@@ -139,8 +145,8 @@ impl Schema {
 
         // TODO - this is the downside of HashOrContent
         let schema_hash = match self.content {
-            HashOrContent::Hash(hash) => hash,
-            HashOrContent::Content(ref v) => {
+            Link::Hash(hash) => hash,
+            Link::Content(ref v) => {
                 let data = serde_json::to_vec(v)?;
                 let outcome = repo.router.blobs().add_bytes(data).await?;
                 outcome.hash
@@ -160,7 +166,7 @@ impl Schema {
             id,
             schema: schema_hash,
             created_at,
-            content: HashOrContent::Hash(hash),
+            content: Link::Hash(hash),
         };
 
         // write event
@@ -222,7 +228,7 @@ impl Schemas {
             title: meta.title,
             // TODO(b5) - wat. why? you're doing something wrong with types.
             author: PublicKey::from_bytes(author.public_key().as_bytes())?,
-            content: HashOrContent::Hash(res.hash),
+            content: Link::Hash(res.hash),
         };
 
         let event = schema.into_mutate_event(author)?;
@@ -244,7 +250,7 @@ impl Schemas {
         // TODO - SLOW
         let conn = self.0.db.lock().await;
         let mut stmt = conn
-            .prepare("SELECT DISTINCT id, pubkey, created_at, kind, schema, data_id, content, sig FROM events WHERE schema = ?1")
+            .prepare(format!("SELECT {EVENT_SQL_FIELDS} FROM events WHERE schema = ?1").as_str())
             .context("selecting schemas from events table")?;
 
         let mut rows = stmt.query([hash.to_string()])?;
@@ -258,15 +264,21 @@ impl Schemas {
     pub async fn list(&self, offset: i64, limit: i64) -> Result<Vec<Schema>> {
         let conn = self.0.db.lock().await;
         let mut stmt = conn
-            .prepare("SELECT DISTINCT id, pubkey, created_at, kind, schema, data_id, content, sig FROM events WHERE kind = ?1 LIMIT ?2 OFFSET ?3")
+            .prepare(
+                format!("SELECT {EVENT_SQL_FIELDS} FROM events WHERE kind = ?1 LIMIT ?2 OFFSET ?3")
+                    .as_str(),
+            )
             .context("selecting schemas from events table")?;
         let mut rows = stmt.query(rusqlite::params![EventKind::MutateSchema, limit, offset])?;
 
         let mut schemas = Vec::new();
         while let Some(row) = rows.next()? {
-            let schema = Schema::from_sql_row(row, self.0.router()).await?;
+            let schema = Schema::from_sql_row(row, self.0.router())
+                .await
+                .context("parsing schema row")?;
             schemas.push(schema);
         }
+
         Ok(schemas)
     }
 }

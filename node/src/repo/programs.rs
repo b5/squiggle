@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use super::events::{
-    Event, EventKind, EventObject, HashOrContent, Tag, EVENT_SQL_FIELDS, NOSTR_ID_TAG,
+    Event, EventKind, EventObject, Link, Tag, EVENT_SQL_FIELDS, NOSTR_ID_TAG,
 };
 use super::tickets::ProgramTicket;
 use super::Repo;
@@ -41,7 +41,7 @@ pub struct Program {
     #[serde(rename = "createdAt")]
     pub created_at: i64,
     pub author: PublicKey,
-    pub content: HashOrContent,
+    pub content: Link,
     pub manifest: Manifest,
     pub html_index: Option<Hash>,
     pub program_entry: Option<Hash>,
@@ -57,8 +57,8 @@ impl EventObject for Program {
 
         // fetch collection content
         let content_hash = match event.content {
-            HashOrContent::Hash(hash) => hash,
-            HashOrContent::Content(_) => anyhow::bail!("content must be a hash"),
+            Link::Hash(hash) => hash,
+            Link::Content(_) => anyhow::bail!("content must be a hash"),
         };
         let collection = client.blobs().get_collection(content_hash).await?;
 
@@ -86,8 +86,8 @@ impl EventObject for Program {
         // assert!(author.public_key() == self.author);
         let tags = vec![Tag::new(NOSTR_ID_TAG, self.id.to_string().as_str())];
         let content = match self.content {
-            HashOrContent::Hash(hash) => hash,
-            HashOrContent::Content(_) => anyhow::bail!("content must be a hash"),
+            Link::Hash(hash) => hash,
+            Link::Content(_) => anyhow::bail!("content must be a hash"),
         };
         Event::create(
             author,
@@ -166,7 +166,7 @@ impl Programs {
             author: PublicKey::from_bytes(author.public_key().as_bytes())?,
             created_at: chrono::Utc::now().timestamp(),
             manifest,
-            content: HashOrContent::Hash(hash),
+            content: Link::Hash(hash),
             html_index,
             program_entry,
         };
@@ -183,8 +183,8 @@ impl Programs {
         // get the raw event, write it to the store
         let program_event = Event::read_raw(&self.0.db, id).await?;
         let program_collection_hash = match program_event.content {
-            HashOrContent::Hash(hash) => hash,
-            HashOrContent::Content(_) => anyhow::bail!("content must be a hash"),
+            Link::Hash(hash) => hash,
+            Link::Content(_) => anyhow::bail!("content must be a hash"),
         };
         let (program_event_hash, program_event_tag) =
             program_event.write_raw_to_blob(router).await?;
@@ -278,10 +278,8 @@ impl Programs {
         let conn = self.0.db.lock().await;
         let mut stmt = conn
             .prepare(
-                format!(
-                    "SELECT ${EVENT_SQL_FIELDS} FROM events WHERE kind = ?1 LIMIT ?2 OFFSET ?3"
-                )
-                .as_str(),
+                format!("SELECT {EVENT_SQL_FIELDS} FROM events WHERE kind = ?1 LIMIT ?2 OFFSET ?3")
+                    .as_str(),
             )
             .context("selecting Programs from events table")?;
         let mut rows = stmt.query(params![EventKind::MutateProgram, limit, offset])?;

@@ -20,7 +20,7 @@ pub(crate) async fn setup_db(db: &DB) -> Result<()> {
             pubkey     TEXT NOT NULL,
             created_at INTEGER NOT NULL,
             kind       INTEGER NOT NULL,
-            schema     TEXT NOT NULL,
+            schema     TEXT,
             data_id    TEXT NOT NULL,
             content    TEXT NOT NULL,
             sig        BLOB NOT NULL

@@ -13,6 +13,9 @@ export function sleep(milliseconds: number) {
 export interface Schema {
   title: string;
   hash: string;
+  content: {
+    Hash: string;
+  };
   data: any;
 }
 
@@ -24,7 +27,7 @@ export function loadOrCreateSchema(schema: any): Schema {
 }
 
 export function query(schema: Schema, query: string): Entry[] {
-  const s = Memory.fromString(schema.hash);
+  const s = Memory.fromString(schema.content.Hash);
   const q = Memory.fromString(query);
   const offset = event_query(s.offset, q.offset);
   s.free();
@@ -39,7 +42,7 @@ export interface Entry {
 }
 
 export function addEntry(schema: Schema, entry: any): Entry {
-  const s = Memory.fromString(schema.hash);
+  const s = Memory.fromString(schema.content.Hash);
   const d = Memory.fromJsonObject(entry);
   const offset = event_create(s.offset, d.offset);
   s.free();

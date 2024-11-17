@@ -36,6 +36,10 @@ impl Repo {
         users::Users::new(self.clone())
     }
 
+    pub fn programs(&self) -> programs::Programs {
+        programs::Programs::new(self.clone())
+    }
+
     pub fn schemas(&self) -> schemas::Schemas {
         schemas::Schemas::new(self.clone())
     }

@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 use crate::router::RouterClient;
 
-use super::events::{Event, EventKind, EventObject, HashOrContent, Tag, NOSTR_ID_TAG};
+use super::events::{Event, EventKind, EventObject, Link, Tag, NOSTR_ID_TAG};
 use super::Repo;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -41,7 +41,7 @@ impl EventObject for User {
 
         // fetch content if necessary
         let (hash, profile) = match event.content {
-            HashOrContent::Hash(hash) => {
+            Link::Hash(hash) => {
                 let profile = match router.blobs().read_to_bytes(hash).await {
                     Ok(content) => {
                         let profile: Profile =
@@ -53,7 +53,7 @@ impl EventObject for User {
                 };
                 (hash, profile)
             }
-            HashOrContent::Content(_) => anyhow::bail!("content must be a hash"),
+            Link::Content(_) => anyhow::bail!("content must be a hash"),
         };
 
         let author = AuthorId::from(event.pubkey.as_bytes());

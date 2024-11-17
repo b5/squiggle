@@ -10,7 +10,7 @@ use uuid::Uuid;
 use crate::repo::events::Tag;
 use crate::router::RouterClient;
 
-use super::events::{Event, EventKind, EventObject, HashOrContent, NOSTR_ID_TAG, NOSTR_SCHEMA_TAG};
+use super::events::{Event, EventKind, EventObject, Link, NOSTR_ID_TAG, NOSTR_SCHEMA_TAG};
 use super::Repo;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -19,7 +19,7 @@ pub struct Row {
     #[serde(rename = "createdAt")]
     pub created_at: i64,
     pub author: PublicKey,
-    pub content: HashOrContent,
+    pub content: Link,
     pub schema: Hash,
 }
 
@@ -35,12 +35,12 @@ impl EventObject for Row {
 
         // fetch content if necessary
         let content = match event.content {
-            HashOrContent::Hash(hash) => {
+            Link::Hash(hash) => {
                 let content = client.blobs().read_to_bytes(hash).await?;
                 let content = serde_json::from_slice::<Value>(&content).map_err(|e| anyhow!(e))?;
-                HashOrContent::Content(content)
+                Link::Content(content)
             }
-            HashOrContent::Content(v) => HashOrContent::Content(v),
+            Link::Content(v) => Link::Content(v),
         };
 
         Ok(Row {
@@ -59,8 +59,8 @@ impl EventObject for Row {
             Tag::new(NOSTR_ID_TAG, self.id.to_string().as_str()),
         ];
         let content = match self.content {
-            HashOrContent::Hash(hash) => hash,
-            HashOrContent::Content(_) => anyhow::bail!("content must be a hash"),
+            Link::Hash(hash) => hash,
+            Link::Content(_) => anyhow::bail!("content must be a hash"),
         };
         Event::create(author, self.created_at, EventKind::MutateRow, tags, content)
     }

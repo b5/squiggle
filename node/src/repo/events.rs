@@ -259,7 +259,8 @@ impl Event {
     pub(crate) async fn read_raw(db: &DB, id: Uuid) -> Result<Self> {
         let conn = db.lock().await;
         let mut stmt = conn.prepare(
-            "SELECT ${EVENT_SQL_FIELDS} FROM events WHERE id = ?1 ORDER BY CREATED DESC",
+            format!("SELECT {EVENT_SQL_FIELDS} FROM events WHERE id = ?1 ORDER BY CREATED DESC")
+                .as_str(),
         )?;
         // TODO(b5) - use query_row with mapping func
         let mut rows = stmt.query(params![id])?;
@@ -332,10 +333,7 @@ impl Event {
     }
 
     pub(crate) async fn write(&self, db: &DB) -> Result<()> {
-        let schema = match self.schema()? {
-            Some(s) => Some(s.to_string()),
-            None => None,
-        };
+        let schema = self.schema()?.map(|s| s.to_string());
         let data_id = self.data_id()?;
         let content = match self.content {
             HashOrContent::Hash(ref hash) => hash.to_string(),
@@ -345,7 +343,7 @@ impl Event {
         let conn = db.lock().await;
         conn.execute(
             format!(
-                "INSERT INTO events (${EVENT_SQL_FIELDS}) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)"
+                "INSERT INTO events ({EVENT_SQL_FIELDS}) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)"
             )
             .as_str(),
             params![
@@ -356,7 +354,7 @@ impl Event {
                 schema,
                 data_id,
                 content,
-                self.sig.to_string(),
+                self.sig.to_bytes(),
             ],
         )?;
         Ok(())
@@ -365,9 +363,9 @@ impl Event {
     pub(crate) fn from_sql_row(row: &rusqlite::Row) -> Result<Self> {
         // (0   1       2           3     4       5        6       7)
         // (id, pubkey, created_at, kind, schema, data_id, content, sig)
+        let id: String = row.get(0)?;
         let pubkey: String = row.get(1)?;
         let pubkey = PublicKey::from_str(&pubkey)?;
-        let id: String = row.get(0)?;
         let content: String = row.get(6)?;
         let data_id: Uuid = row.get(5)?;
         let sig_data: Vec<u8> = row.get(7)?;
@@ -375,15 +373,20 @@ impl Event {
             .try_into()
             .map_err(|_| anyhow!("invalid signature data"))?;
         let sig = Signature::from_bytes(&sig_data);
+
+        let mut tags: Vec<Tag> = Vec::new();
+        let schema: Option<String> = row.get(4)?;
+        if let Some(schema) = schema {
+            tags.push(Tag(NOSTR_SCHEMA_TAG.to_string(), schema, None));
+        }
+        tags.push(Tag(NOSTR_ID_TAG.to_string(), data_id.to_string(), None));
+
         Ok(Self {
             id: Sha256Digest::from_str(&id).map_err(|e| anyhow!(e))?,
             pubkey,
             created_at: row.get(2)?,
             kind: row.get(3)?,
-            tags: vec![
-                Tag(NOSTR_SCHEMA_TAG.to_string(), row.get(4)?, None),
-                Tag(NOSTR_ID_TAG.to_string(), data_id.to_string(), None),
-            ],
+            tags,
             content: Hash::from_str(&content)?.into(),
             sig,
         })
