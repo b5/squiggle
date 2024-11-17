@@ -1,6 +1,5 @@
 use anyhow::{anyhow, Result};
 use futures::StreamExt;
-use iroh::blobs::Hash;
 use iroh::docs::{Author, AuthorId};
 use iroh::net::key::PublicKey;
 use rusqlite::params;
@@ -9,7 +8,7 @@ use uuid::Uuid;
 
 use crate::router::RouterClient;
 
-use super::events::{Event, EventKind, EventObject, Link, Tag, NOSTR_ID_TAG};
+use super::events::{Event, EventKind, EventObject, HashLink, Tag, NOSTR_ID_TAG};
 use super::Repo;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -24,7 +23,7 @@ pub struct User {
     pub id: Uuid,
     pub created_at: i64,
     pub pubkey: PublicKey,
-    pub content: Hash,
+    pub content: HashLink,
     pub blankame: String,
     pub author: Option<Author>,
     pub profile: Option<Profile>,
@@ -40,20 +39,13 @@ impl EventObject for User {
         let id = event.data_id()?.ok_or_else(|| anyhow!("missing data id"))?;
 
         // fetch content if necessary
-        let (hash, profile) = match event.content {
-            Link::Hash(hash) => {
-                let profile = match router.blobs().read_to_bytes(hash).await {
-                    Ok(content) => {
-                        let profile: Profile =
-                            serde_json::from_slice(&content).map_err(|e| anyhow!(e))?;
-                        Some(profile)
-                    }
-                    // TODO(b5) - we only want to return None if the hash is not found
-                    Err(_) => None,
-                };
-                (hash, profile)
+        let mut content = event.content.clone();
+        let profile = match content.resolve(router).await {
+            Ok(content) => {
+                let profile: Profile = serde_json::from_value(content)?;
+                Some(profile)
             }
-            Link::Content(_) => anyhow::bail!("content must be a hash"),
+            Err(_) => None,
         };
 
         let author = AuthorId::from(event.pubkey.as_bytes());
@@ -66,7 +58,7 @@ impl EventObject for User {
             id,
             pubkey: event.pubkey,
             created_at: event.created_at,
-            content: hash,
+            content,
             blankame: get_blankname(event.pubkey),
             profile,
             author,
@@ -81,7 +73,7 @@ impl EventObject for User {
             self.created_at,
             EventKind::MutateUser,
             tags,
-            self.content,
+            self.content.clone(),
         )
     }
 }
@@ -113,7 +105,10 @@ impl User {
             id,
             pubkey,
             created_at: chrono::Utc::now().timestamp(),
-            content: result.hash,
+            content: HashLink {
+                hash: result.hash,
+                value: None,
+            },
             profile: Some(profile),
             blankame: get_blankname(pubkey),
             author: Some(author.clone()),

@@ -5,6 +5,7 @@ use iroh::docs::Author;
 use iroh::net::key::PublicKey;
 use rusqlite::types::{FromSql, ToSqlOutput};
 use rusqlite::{params, ToSql};
+use serde::ser::SerializeStruct;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -184,15 +185,91 @@ impl FromStr for Sha256Digest {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub enum HashOrContent {
-    Hash(Hash),
-    Content(Value),
+#[derive(Debug, Clone)]
+pub struct HashLink {
+    pub hash: Hash,
+    pub value: Option<Value>,
 }
 
-impl From<Hash> for HashOrContent {
+impl From<Hash> for HashLink {
     fn from(hash: Hash) -> Self {
-        HashOrContent::Hash(hash)
+        HashLink { hash, value: None }
+    }
+}
+
+impl Serialize for HashLink {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match &self.value {
+            Some(value) => {
+                let mut state = serializer.serialize_struct("HashLink", 2)?;
+                state.serialize_field("hash", &self.hash.to_string())?;
+                state.serialize_field("value", value)?;
+                state.end()
+            }
+            None => serializer.serialize_str(&self.hash.to_string()),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for HashLink {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct HashLinkVisitor;
+
+        impl<'de> serde::de::Visitor<'de> for HashLinkVisitor {
+            type Value = HashLink;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("a string or a struct representing a HashLink")
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error,
+            {
+                let hash = Hash::from_str(value).map_err(E::custom)?;
+                Ok(HashLink::from(hash))
+            }
+
+            fn visit_map<M>(self, map: M) -> Result<Self::Value, M::Error>
+            where
+                M: serde::de::MapAccess<'de>,
+            {
+                #[derive(Deserialize)]
+                struct HashLinkStruct {
+                    hash: Hash,
+                    value: Option<Value>,
+                }
+
+                let hash_link_struct =
+                    HashLinkStruct::deserialize(serde::de::value::MapAccessDeserializer::new(map))?;
+                Ok(HashLink {
+                    hash: hash_link_struct.hash,
+                    value: hash_link_struct.value,
+                })
+            }
+        }
+
+        deserializer.deserialize_any(HashLinkVisitor)
+    }
+}
+
+impl HashLink {
+    pub async fn resolve(&mut self, router: &RouterClient) -> Result<Value> {
+        match self.value {
+            Some(ref v) => Ok(v.clone()),
+            None => {
+                let data = router.blobs().read_to_bytes(self.hash).await?;
+                let value: Value = serde_json::from_slice(&data)?;
+                self.value = Some(value.clone());
+                Ok(value)
+            }
+        }
     }
 }
 
@@ -227,7 +304,7 @@ pub(crate) struct Event {
     pub kind: EventKind,
     pub tags: Vec<Tag>,
     pub sig: Signature,
-    pub content: HashOrContent,
+    pub content: HashLink,
 }
 
 impl Event {
@@ -236,12 +313,12 @@ impl Event {
         created_at: i64,
         kind: EventKind,
         tags: Vec<Tag>,
-        content: Hash,
+        content: HashLink,
     ) -> Result<Event> {
         // TODO(b5) - wat. why? you're doing something wrong with types.
         let pubkey = PublicKey::from_bytes(author.public_key().as_bytes())?;
 
-        let id = Self::nostr_id(pubkey, created_at, kind, &tags, &content)?;
+        let id = Self::nostr_id(pubkey, created_at, kind, &tags, &content.hash)?;
         let sig = author.sign(id.as_bytes());
         Ok(Event {
             id,
@@ -250,7 +327,7 @@ impl Event {
             kind,
             tags,
             sig,
-            content: content.into(),
+            content,
         })
     }
 
@@ -335,10 +412,6 @@ impl Event {
     pub(crate) async fn write(&self, db: &DB) -> Result<()> {
         let schema = self.schema()?.map(|s| s.to_string());
         let data_id = self.data_id()?;
-        let content = match self.content {
-            HashOrContent::Hash(ref hash) => hash.to_string(),
-            HashOrContent::Content(_) => anyhow::bail!("content must be a hash"),
-        };
 
         let conn = db.lock().await;
         conn.execute(
@@ -353,7 +426,7 @@ impl Event {
                 self.kind,
                 schema,
                 data_id,
-                content,
+                self.content.hash.to_string(),
                 self.sig.to_bytes(),
             ],
         )?;

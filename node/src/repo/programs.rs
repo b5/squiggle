@@ -13,9 +13,7 @@ use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use super::events::{
-    Event, EventKind, EventObject, Link, Tag, EVENT_SQL_FIELDS, NOSTR_ID_TAG,
-};
+use super::events::{Event, EventKind, EventObject, HashLink, Tag, EVENT_SQL_FIELDS, NOSTR_ID_TAG};
 use super::tickets::ProgramTicket;
 use super::Repo;
 use crate::router::RouterClient;
@@ -41,7 +39,7 @@ pub struct Program {
     #[serde(rename = "createdAt")]
     pub created_at: i64,
     pub author: PublicKey,
-    pub content: Link,
+    pub content: HashLink,
     pub manifest: Manifest,
     pub html_index: Option<Hash>,
     pub program_entry: Option<Hash>,
@@ -56,11 +54,7 @@ impl EventObject for Program {
         let id = event.data_id()?.ok_or_else(|| anyhow!("missing data id"))?;
 
         // fetch collection content
-        let content_hash = match event.content {
-            Link::Hash(hash) => hash,
-            Link::Content(_) => anyhow::bail!("content must be a hash"),
-        };
-        let collection = client.blobs().get_collection(content_hash).await?;
+        let collection = client.blobs().get_collection(event.content.hash).await?;
 
         // extract the manifest
         let (_, manifest_hash) = collection
@@ -85,16 +79,12 @@ impl EventObject for Program {
     fn into_mutate_event(&self, author: Author) -> Result<Event> {
         // assert!(author.public_key() == self.author);
         let tags = vec![Tag::new(NOSTR_ID_TAG, self.id.to_string().as_str())];
-        let content = match self.content {
-            Link::Hash(hash) => hash,
-            Link::Content(_) => anyhow::bail!("content must be a hash"),
-        };
         Event::create(
             author,
             self.created_at,
             EventKind::MutateProgram,
             tags,
-            content,
+            self.content.clone(),
         )
     }
 }
@@ -166,7 +156,10 @@ impl Programs {
             author: PublicKey::from_bytes(author.public_key().as_bytes())?,
             created_at: chrono::Utc::now().timestamp(),
             manifest,
-            content: Link::Hash(hash),
+            content: HashLink {
+                hash,
+                value: None,
+            },
             html_index,
             program_entry,
         };
@@ -182,10 +175,6 @@ impl Programs {
         let router = self.0.router();
         // get the raw event, write it to the store
         let program_event = Event::read_raw(&self.0.db, id).await?;
-        let program_collection_hash = match program_event.content {
-            Link::Hash(hash) => hash,
-            Link::Content(_) => anyhow::bail!("content must be a hash"),
-        };
         let (program_event_hash, program_event_tag) =
             program_event.write_raw_to_blob(router).await?;
 
@@ -196,7 +185,7 @@ impl Programs {
         // get collection contents
         let program_collection = router
             .blobs()
-            .get_collection(program_collection_hash)
+            .get_collection(program_event.content.hash)
             .await?;
 
         // create our collection contents

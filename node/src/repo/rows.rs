@@ -10,7 +10,7 @@ use uuid::Uuid;
 use crate::repo::events::Tag;
 use crate::router::RouterClient;
 
-use super::events::{Event, EventKind, EventObject, Link, NOSTR_ID_TAG, NOSTR_SCHEMA_TAG};
+use super::events::{Event, EventKind, EventObject, HashLink, NOSTR_ID_TAG, NOSTR_SCHEMA_TAG};
 use super::Repo;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -19,7 +19,7 @@ pub struct Row {
     #[serde(rename = "createdAt")]
     pub created_at: i64,
     pub author: PublicKey,
-    pub content: Link,
+    pub content: HashLink,
     pub schema: Hash,
 }
 
@@ -34,13 +34,16 @@ impl EventObject for Row {
         let id = event.data_id()?.ok_or_else(|| anyhow!("missing data id"))?;
 
         // fetch content if necessary
-        let content = match event.content {
-            Link::Hash(hash) => {
-                let content = client.blobs().read_to_bytes(hash).await?;
+        let content = match event.content.value {
+            Some(_) => event.content,
+            None => {
+                let content = client.blobs().read_to_bytes(event.content.hash).await?;
                 let content = serde_json::from_slice::<Value>(&content).map_err(|e| anyhow!(e))?;
-                Link::Content(content)
+                HashLink {
+                    hash: event.content.hash,
+                    value: Some(content),
+                }
             }
-            Link::Content(v) => Link::Content(v),
         };
 
         Ok(Row {
@@ -58,11 +61,13 @@ impl EventObject for Row {
             Tag::new(NOSTR_SCHEMA_TAG, self.schema.to_string().as_str()),
             Tag::new(NOSTR_ID_TAG, self.id.to_string().as_str()),
         ];
-        let content = match self.content {
-            Link::Hash(hash) => hash,
-            Link::Content(_) => anyhow::bail!("content must be a hash"),
-        };
-        Event::create(author, self.created_at, EventKind::MutateRow, tags, content)
+        Event::create(
+            author,
+            self.created_at,
+            EventKind::MutateRow,
+            tags,
+            self.content.clone(),
+        )
     }
 }
 

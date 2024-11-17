@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
 
-use super::events::{Event, EventKind, EventObject, Link, Tag, EVENT_SQL_FIELDS, NOSTR_ID_TAG};
+use super::events::{Event, EventKind, EventObject, HashLink, Tag, EVENT_SQL_FIELDS, NOSTR_ID_TAG};
 use super::rows::Row;
 use super::Repo;
 use crate::router::RouterClient;
@@ -23,7 +23,7 @@ pub struct Schema {
     #[serde(rename = "createdAt")]
     pub created_at: i64,
     pub author: PublicKey,
-    pub content: Link,
+    pub content: HashLink,
     pub title: String,
 }
 
@@ -38,20 +38,25 @@ impl EventObject for Schema {
 
         // fetch content if necessary
         // TODO(b5): I know the double serializing is terrible
-        let (content, title) = match event.content {
-            Link::Hash(hash) => {
-                let content = client.blobs().read_to_bytes(hash).await?;
+        let (content, title) = match event.content.value {
+            None => {
+                let content = client.blobs().read_to_bytes(event.content.hash).await?;
                 let meta =
                     serde_json::from_slice::<SchemaMetadata>(&content).map_err(|e| anyhow!(e))?;
-
                 let content = serde_json::from_slice::<Value>(&content).map_err(|e| anyhow!(e))?;
-                (Link::Content(content), meta.title)
+                (
+                    HashLink {
+                        hash: event.content.hash,
+                        value: Some(content),
+                    },
+                    meta.title,
+                )
             }
-            Link::Content(v) => {
-                let data = serde_json::to_vec(&v)?;
+            Some(ref v) => {
+                let data = serde_json::to_vec(v)?;
                 let meta =
                     serde_json::from_slice::<SchemaMetadata>(&data).map_err(|e| anyhow!(e))?;
-                (Link::Content(v), meta.title)
+                (event.content, meta.title)
             }
         };
 
@@ -67,16 +72,12 @@ impl EventObject for Schema {
     fn into_mutate_event(&self, author: Author) -> Result<Event> {
         // assert!(author.public_key() == self.author);
         let tags = vec![Tag::new(NOSTR_ID_TAG, self.id.to_string().as_str())];
-        let content = match self.content {
-            Link::Hash(hash) => hash,
-            Link::Content(_) => anyhow::bail!("content must be a hash"),
-        };
         Event::create(
             author,
             self.created_at,
             EventKind::MutateSchema,
             tags,
-            content,
+            self.content.clone(),
         )
     }
 }
@@ -104,21 +105,13 @@ impl Schema {
     //     Ok(res)
     // }
 
-    pub async fn validator(&self, router: &RouterClient) -> Result<jsonschema::Validator> {
-        match &self.content {
-            Link::Content(data) => {
-                jsonschema::validator_for(data).context("failed to create validator")
-            }
-            Link::Hash(hash) => {
-                let bytes = router.blobs().read_to_bytes(*hash).await?;
-                let data = serde_json::from_slice(&bytes)?;
-                jsonschema::validator_for(&data).context("failed to create validator")
-            }
-        }
+    pub async fn validator(&mut self, router: &RouterClient) -> Result<jsonschema::Validator> {
+        let value = self.content.resolve(router).await?;
+        jsonschema::validator_for(&value).context("failed to create validator")
     }
 
     pub async fn create_row(
-        &self,
+        &mut self,
         repo: &Repo,
         author: Author,
         data: serde_json::Value,
@@ -128,7 +121,7 @@ impl Schema {
     }
 
     pub async fn mutate_row(
-        &self,
+        &mut self,
         repo: &Repo,
         author: Author,
         id: Uuid,
@@ -143,16 +136,6 @@ impl Schema {
             return Err(anyhow!("validation error: {}", e.to_string()));
         };
 
-        // TODO - this is the downside of HashOrContent
-        let schema_hash = match self.content {
-            Link::Hash(hash) => hash,
-            Link::Content(ref v) => {
-                let data = serde_json::to_vec(v)?;
-                let outcome = repo.router.blobs().add_bytes(data).await?;
-                outcome.hash
-            }
-        };
-
         // add to iroh
         let data = serde_json::to_vec(&data)?;
         let outcome = repo.router.blobs().add_bytes(data).await?;
@@ -164,9 +147,9 @@ impl Schema {
             // TODO(b5) - wat. why? you're doing something wrong with types.
             author: PublicKey::from_bytes(author.public_key().as_bytes())?,
             id,
-            schema: schema_hash,
+            schema: self.content.hash,
             created_at,
-            content: Link::Hash(hash),
+            content: HashLink { hash, value: None },
         };
 
         // write event
@@ -218,8 +201,6 @@ impl Schemas {
         // TODO - test that this enforces field ordering
         let serialized = serde_json::to_vec(&schema)?;
 
-        // TODO - should construct a HashSeq, place the new schema as the 1th element
-        // and update the metadata in 0th element
         let res = self.0.router.blobs().add_bytes(serialized).await?;
 
         let schema = Schema {
@@ -228,7 +209,10 @@ impl Schemas {
             title: meta.title,
             // TODO(b5) - wat. why? you're doing something wrong with types.
             author: PublicKey::from_bytes(author.public_key().as_bytes())?,
-            content: Link::Hash(res.hash),
+            content: HashLink {
+                hash: res.hash,
+                value: None,
+            },
         };
 
         let event = schema.into_mutate_event(author)?;
