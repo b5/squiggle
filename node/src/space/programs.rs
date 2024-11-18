@@ -15,7 +15,7 @@ use uuid::Uuid;
 
 use super::events::{Event, EventKind, EventObject, HashLink, Tag, EVENT_SQL_FIELDS, NOSTR_ID_TAG};
 use super::tickets::ProgramTicket;
-use super::Repo;
+use super::Space;
 use crate::router::RouterClient;
 
 const MANIFEST_FILENAME: &str = "program.json";
@@ -118,20 +118,26 @@ impl Program {
 }
 
 #[derive(Clone)]
-pub struct Programs(Repo);
+pub struct Programs(Space);
 
 impl Programs {
-    pub fn new(repo: Repo) -> Self {
+    pub fn new(repo: Space) -> Self {
         Programs(repo)
     }
 
-    pub async fn create(&self, author: Author, path: impl Into<PathBuf>) -> Result<Program> {
+    pub async fn create(
+        &self,
+        router: &RouterClient,
+        author: Author,
+        path: impl Into<PathBuf>,
+    ) -> Result<Program> {
         let id = Uuid::new_v4();
-        self.mutate(author, id, path).await
+        self.mutate(router, author, id, path).await
     }
 
     pub async fn mutate(
         &self,
+        router: &RouterClient,
         author: Author,
         id: Uuid,
         path: impl Into<PathBuf>,
@@ -151,7 +157,7 @@ impl Programs {
         let manifest: Manifest = serde_json::from_slice(data.as_slice())?;
 
         // create collection
-        let (hash, _size, collection) = import(self.0.router().blobs(), path).await?;
+        let (hash, _size, collection) = import(router.blobs(), path).await?;
 
         // build program
         let (html_index, program_entry) = Program::hash_pointers(&manifest, &collection)?;
@@ -173,8 +179,7 @@ impl Programs {
         Ok(program)
     }
 
-    pub async fn share(&self, id: Uuid) -> Result<ProgramTicket> {
-        let router = self.0.router();
+    pub async fn share(&self, router: &RouterClient, id: Uuid) -> Result<ProgramTicket> {
         // get the raw event, write it to the store
         let program_event = Event::read_raw(&self.0.db, id).await?;
         let (program_event_hash, program_event_tag) =
@@ -200,15 +205,14 @@ impl Programs {
             .await?;
 
         // get our dialing information
-        let mut addr = self.0.router().net().node_addr().await?;
+        let mut addr = router.net().node_addr().await?;
         addr.apply_options(iroh::base::node_addr::AddrInfoOptions::Id);
 
         // create ticket
         ProgramTicket::new(addr, hash, iroh::blobs::BlobFormat::HashSeq)
     }
 
-    pub async fn download(&self, ticket: ProgramTicket) -> Result<Program> {
-        let router = self.0.router();
+    pub async fn download(&self, router: &RouterClient, ticket: ProgramTicket) -> Result<Program> {
         let addr = ticket.node_addr().clone();
         // fetch the blob
         router
@@ -241,16 +245,16 @@ impl Programs {
         Program::from_event(event, router).await
     }
 
-    pub async fn get_by_name(&self, name: String) -> Result<Program> {
+    pub async fn get_by_name(&self, router: &RouterClient, name: String) -> Result<Program> {
         // TODO (b5) - I know. this is terrible
-        self.list(0, -1)
+        self.list(router, 0, -1)
             .await?
             .into_iter()
             .find(|program| program.manifest.name == name)
             .ok_or_else(|| anyhow!("Program not found"))
     }
 
-    pub async fn get_by_id(&self, id: Uuid) -> Result<Program> {
+    pub async fn get_by_id(&self, router: &RouterClient, id: Uuid) -> Result<Program> {
         let conn = self.0.db.lock().await;
         println!("getting program: {:?}", id);
         let mut stmt = conn
@@ -262,7 +266,7 @@ impl Programs {
         let mut rows = stmt.query(params![EventKind::MutateProgram, id])?;
 
         if let Some(row) = rows.next()? {
-            Program::from_sql_row(row, self.0.router()).await
+            Program::from_sql_row(row, router).await
         } else {
             Err(anyhow!("Program not found"))
         }
@@ -278,7 +282,12 @@ impl Programs {
         //     .ok_or_else(|| anyhow!("Program not found"))
     }
 
-    pub async fn list(&self, offset: i64, limit: i64) -> Result<Vec<Program>> {
+    pub async fn list(
+        &self,
+        router: &RouterClient,
+        offset: i64,
+        limit: i64,
+    ) -> Result<Vec<Program>> {
         let conn = self.0.db.lock().await;
         let mut stmt = conn
             .prepare(
@@ -290,7 +299,7 @@ impl Programs {
 
         let mut programs = Vec::new();
         while let Some(row) = rows.next()? {
-            let program = Program::from_sql_row(row, self.0.router()).await?;
+            let program = Program::from_sql_row(row, router).await?;
             programs.push(program);
         }
         Ok(programs)

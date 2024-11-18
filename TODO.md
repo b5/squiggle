@@ -1,5 +1,11 @@
-Purpose: Airtable Clone for Laptop-Scale Data
-  * Local 
+~~Purpose: Airtable Clone for Laptop-Scale Data~~~
+
+Sqgl: 
+Squiggle: a free, hackable, local-first version of notion on steriods.
+* it's cozy - 
+* archival grade
+* integrate with anything -
+* fully hackable - write programs that extend the full power of webassembly & 
 
 High Level Requirements:
 * keep large amounts of disparate data synced from external sources
@@ -11,7 +17,7 @@ High Level Requirements:
 -- 
 
 * [ ] Need a "hard refresh" option, ideally keyboard shortcut
-* [ ] bundler should move into node
+* [x] bundler should move into node
 
 --
 

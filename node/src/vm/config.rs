@@ -6,7 +6,6 @@ use iroh::node::GcPolicy;
 use serde::{Deserialize, Serialize};
 
 use super::content_routing::AutofetchPolicy;
-use super::workspace::WorkspaceConfig;
 
 /// The configuration for an iroh node.
 #[derive(PartialEq, Eq, Debug, Deserialize, Serialize, Clone)]
@@ -48,15 +47,6 @@ impl Default for NodeConfig {
             autofetch_default: AutofetchPolicy::Disabled,
             tracing_endpoint: None,
             worker_root,
-        }
-    }
-}
-
-impl NodeConfig {
-    pub(crate) fn workspace_config(&self) -> WorkspaceConfig {
-        WorkspaceConfig {
-            autofetch: self.autofetch_default.clone(),
-            worker_root: self.worker_root.clone(),
         }
     }
 }

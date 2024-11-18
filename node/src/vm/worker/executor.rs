@@ -3,11 +3,10 @@ use std::path::Path;
 use anyhow::{bail, Result};
 use tracing::{debug, warn};
 
-use crate::repo::Repo;
-use crate::vm::{
-    blobs::Blobs,
-    job::{JobContext, JobType},
-};
+use crate::router::RouterClient;
+use crate::space::Spaces;
+use crate::vm::blobs::Blobs;
+use crate::vm::job::{JobContext, JobType};
 
 use self::{docker::Docker, wasm::WasmExecutor};
 
@@ -31,18 +30,24 @@ pub struct Executors {
 }
 
 impl Executors {
-    pub async fn new(repo: Repo, blobs: Blobs, root: impl AsRef<Path>) -> Result<Self> {
+    pub async fn new(
+        spaces: Spaces,
+        router: RouterClient,
+        blobs: Blobs,
+        root: impl AsRef<Path>,
+    ) -> Result<Self> {
         let docker_root = root.as_ref().join("docker");
-        let docker = match Docker::new(repo.clone(), blobs.clone(), docker_root).await {
-            Ok(docker) => Some(docker),
-            Err(err) => {
-                debug!("docker error: {:?}", err);
-                warn!("Docker is not available, worker capability will not be started");
-                None
-            }
-        };
+        let docker =
+            match Docker::new(spaces.clone(), router.clone(), blobs.clone(), docker_root).await {
+                Ok(docker) => Some(docker),
+                Err(err) => {
+                    debug!("docker error: {:?}", err);
+                    warn!("Docker is not available, worker capability will not be started");
+                    None
+                }
+            };
         let wasm_root = root.as_ref().join("wasm");
-        let wasm = WasmExecutor::new(repo, blobs, wasm_root).await?;
+        let wasm = WasmExecutor::new(spaces, router, blobs, wasm_root).await?;
 
         Ok(Self { docker, wasm })
     }

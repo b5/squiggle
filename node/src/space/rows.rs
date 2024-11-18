@@ -7,11 +7,11 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
 
-use crate::repo::events::Tag;
 use crate::router::RouterClient;
+use crate::space::events::Tag;
 
 use super::events::{Event, EventKind, EventObject, HashLink, NOSTR_ID_TAG, NOSTR_SCHEMA_TAG};
-use super::Repo;
+use super::Space;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Row {
@@ -79,25 +79,27 @@ impl Row {
 }
 
 #[derive(Clone)]
-pub struct Rows(Repo);
+pub struct Rows(Space);
 
 impl Rows {
-    pub fn new(repo: Repo) -> Self {
+    pub fn new(repo: Space) -> Self {
         Rows(repo)
     }
 
     pub async fn create(
         &self,
+        router: &RouterClient,
         author: Author,
         schema: Hash,
         data: serde_json::Value,
     ) -> Result<Row> {
         let data_id = Uuid::new_v4();
-        self.mutate(author, schema, data_id, data).await
+        self.mutate(router, author, schema, data_id, data).await
     }
 
     pub async fn mutate(
         &self,
+        router: &RouterClient,
         author: Author,
         schema_hash: Hash,
         id: Uuid,
@@ -105,15 +107,16 @@ impl Rows {
     ) -> Result<Row> {
         self.0
             .schemas()
-            .get_by_hash(schema_hash)
+            .get_by_hash(router, schema_hash)
             .await
             .context("loading schema")?
-            .mutate_row(&self.0, author, id, data)
+            .mutate_row(router, &self.0, author, id, data)
             .await
     }
 
     pub async fn query(
         &self,
+        router: &RouterClient,
         schema: Hash,
         _query: String,
         offset: i64,
@@ -125,7 +128,7 @@ impl Rows {
         let mut events = Vec::new();
 
         while let Some(row) = rows.next()? {
-            let event = Row::from_sql_row(row, &self.0.router).await?;
+            let event = Row::from_sql_row(row, router).await?;
             events.push(event);
         }
         Ok(events)

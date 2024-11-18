@@ -5,41 +5,48 @@ use anyhow::{anyhow, Result};
 use iroh::util::path::IrohPaths;
 use tokio::task::JoinHandle;
 
-use crate::repo::Repo;
 use crate::router::Router;
-use crate::vm::VM;
+use crate::space::Spaces;
+use crate::vm::{VMConfig, VM};
 
 pub struct Node {
+    spaces: Spaces,
     router: Router,
-    repo: Repo,
     vm: VM,
 }
 
 impl Node {
     pub async fn open(path: impl Into<PathBuf>) -> Result<Self> {
-        let path = path.into();
-        let router = crate::router::router(&path).await?;
+        let repo_path = path.into();
+        let router = crate::router::router(&repo_path).await?;
 
         // add the node key as an author:
         // TODO(b5): this is an anti-pattern, remove.
         let secret_key =
-            iroh::util::fs::load_secret_key(IrohPaths::SecretKey.with_root(&path)).await?;
+            iroh::util::fs::load_secret_key(IrohPaths::SecretKey.with_root(&repo_path)).await?;
         let author = iroh::docs::Author::from_bytes(&secret_key.to_bytes());
         router.authors().import(author.clone()).await?;
 
-        let repo = Repo::open(router.client().clone(), &path).await?;
+        let spaces = Spaces::open_all(repo_path.clone()).await?;
+        let vm = VM::create(
+            spaces.clone(),
+            router.client(),
+            VMConfig {
+                autofetch: crate::vm::content_routing::AutofetchPolicy::Disabled,
+                worker_root: repo_path,
+            },
+        )
+        .await?;
 
-        let vm = VM::new(repo.clone(), &path).await?;
+        Ok(Node { router, spaces, vm })
+    }
 
-        Ok(Node { router, repo, vm })
+    pub fn spaces(&self) -> &Spaces {
+        &self.spaces
     }
 
     pub fn router(&self) -> &Router {
         &self.router
-    }
-
-    pub fn repo(&self) -> &Repo {
-        &self.repo
     }
 
     pub fn vm(&self) -> &VM {

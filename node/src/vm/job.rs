@@ -128,6 +128,9 @@ pub enum JobType {
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct JobDescription {
+    /// name of the space to run the job in
+    /// TODO - this should be the space id
+    pub space: String,
     /// Human-readable name of the job
     pub name: String,
     /// the identifier of the user to run the job as.
@@ -316,6 +319,8 @@ pub enum JobOutput {
 
 #[derive(Debug)]
 pub struct JobContext {
+    // space to run the job within
+    pub space: String,
     /// Job id
     pub id: Uuid,
     pub environment: HashMap<String, String>,

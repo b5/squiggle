@@ -19,7 +19,8 @@ use tokio::sync::Mutex;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
-use crate::repo::Repo;
+use crate::router::RouterClient;
+use crate::space::Spaces;
 
 use super::blobs::Blobs;
 use super::doc::{DocEventHandler, Event, EventData};
@@ -42,7 +43,8 @@ pub struct Worker {
     executors: Executors,
     doc: Doc,
     blobs: Blobs,
-    repo: Repo,
+    spaces: Spaces,
+    router: RouterClient,
     current_jobs: Arc<Mutex<HashSet<Uuid>>>,
     /// If this worker will accept work.
     enabled: Arc<AtomicBool>,
@@ -50,19 +52,21 @@ pub struct Worker {
 
 impl Worker {
     pub async fn new(
+        spaces: Spaces,
+        router: RouterClient,
         author_id: AuthorId,
         doc: Doc,
         blobs: Blobs,
-        repo: Repo,
         root: impl AsRef<Path>,
     ) -> Result<Self> {
-        let executors = Executors::new(repo.clone(), blobs.clone(), root).await?;
+        let executors = Executors::new(spaces.clone(), router.clone(), blobs.clone(), root).await?;
         let w = Self {
+            spaces,
+            router,
             author_id,
             executors,
             doc,
             blobs,
-            repo,
             current_jobs: Default::default(),
             enabled: Arc::new(AtomicBool::new(true)),
         };
@@ -133,14 +137,14 @@ impl Worker {
         info!("executing job {}", job_id);
 
         let author = self
-            .repo
-            .router()
+            .router
             .authors()
             .export(scheduled_job.author)
             .await?
             .ok_or_else(|| anyhow!("author not found: {}", scheduled_job.author))?;
 
         let job_ctx = JobContext {
+            space: scheduled_job.description.space,
             author,
             id: job_id,
             environment: scheduled_job.description.environment.clone(),
@@ -282,7 +286,7 @@ impl Worker {
 
     async fn get_scheduled_job(&self, job_hash: Hash) -> Result<ScheduledJob> {
         self.blobs.fetch_blob(job_hash).await?;
-        let data = self.repo.router().blobs().read_to_bytes(job_hash).await?;
+        let data = self.router.blobs().read_to_bytes(job_hash).await?;
         let jd = ScheduledJob::try_from(data)?;
         Ok(jd)
     }
@@ -353,14 +357,14 @@ impl Worker {
         // only execute job if we're in the requesting phase
         if is_our_job && status == ExecutionStatus::Requested {
             let self2 = self.clone();
-            let node2 = self.repo.clone();
+            let node2 = self.router.clone();
 
             iroh_metrics::inc!(Metrics, worker_jobs_running);
             let res = async {
                 self.set_execution_state(job_id, ExecutionStatus::Running, job_hash, job_len)
                     .await?;
 
-                let data = node2.router().blobs().read_to_bytes(job_hash).await?;
+                let data = node2.blobs().read_to_bytes(job_hash).await?;
                 let scheduled_job = ScheduledJob::try_from(data)?;
                 let timeout: std::time::Duration = scheduled_job
                     .description

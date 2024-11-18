@@ -8,7 +8,8 @@ use iroh::docs::Author;
 use tracing::debug;
 use uuid::Uuid;
 
-use crate::repo::Repo;
+use crate::router::RouterClient;
+use crate::space::{Space, Spaces};
 use crate::vm::blobs::Blobs;
 use crate::vm::job::Source;
 
@@ -18,15 +19,26 @@ const MAIN_FUNC_NAME: &str = "main";
 
 #[derive(derive_more::Debug, Clone)]
 pub struct WasmExecutor {
-    repo: Repo,
+    spaces: Spaces,
+    router: RouterClient,
     blobs: Blobs,
     /// Root folder to store shared files in
     root: PathBuf,
 }
 
 impl WasmExecutor {
-    pub async fn new(repo: Repo, blobs: Blobs, root: PathBuf) -> Result<Self> {
-        Ok(WasmExecutor { repo, blobs, root })
+    pub async fn new(
+        spaces: Spaces,
+        router: RouterClient,
+        blobs: Blobs,
+        root: PathBuf,
+    ) -> Result<Self> {
+        Ok(WasmExecutor {
+            spaces,
+            router,
+            blobs,
+            root,
+        })
     }
 }
 
@@ -39,6 +51,11 @@ impl Executor for WasmExecutor {
         ctx: &crate::vm::job::JobContext,
         job: Self::Job,
     ) -> Result<Self::Report> {
+        let space = self
+            .spaces
+            .get(&ctx.space)
+            .await
+            .ok_or_else(|| anyhow!("can't find space: {}", ctx.space))?;
         debug!("executing job: {:?}. context: {:?}", job, ctx.id);
         let downloads_path = ctx.downloads_path(&self.root);
         let uploads_path = ctx.uploads_path(&self.root);
@@ -46,13 +63,13 @@ impl Executor for WasmExecutor {
         tokio::fs::create_dir_all(&uploads_path).await?;
 
         println!("downloading artifacts to {}", downloads_path.display());
-        ctx.write_downloads(&downloads_path, &self.blobs, self.repo.router())
+        ctx.write_downloads(&downloads_path, &self.blobs, &self.router)
             .await
             .context("write downloads")?;
 
         let program = match job.module {
             Source::LocalBlob(hash) => {
-                let result = self.repo.router().blobs().read_to_bytes(hash).await?;
+                let result = self.router.blobs().read_to_bytes(hash).await?;
                 Wasm::data(result)
             }
             Source::LocalPath(path) => Wasm::file(downloads_path.join(&path)),
@@ -65,8 +82,9 @@ impl Executor for WasmExecutor {
 
         let wasm_context = UserData::new(WasmContext {
             author: ctx.author.clone(),
+            router: self.router.clone(),
             rt: tokio::runtime::Handle::current(),
-            repo: self.repo.clone(),
+            space: space.clone(),
             output: String::new(),
         });
         let mut plugin = PluginBuilder::new(manifest)
@@ -100,7 +118,7 @@ impl Executor for WasmExecutor {
         let output = plugin.call::<_, &str>(MAIN_FUNC_NAME, ())?;
 
         debug!("uploading artifacts from {}", uploads_path.display());
-        ctx.read_uploads(&uploads_path, &self.blobs, self.repo.router())
+        ctx.read_uploads(&uploads_path, &self.blobs, &self.router)
             .await
             .context("read uploads")?;
 
@@ -124,7 +142,8 @@ pub struct Report {
 struct WasmContext {
     rt: tokio::runtime::Handle,
     author: Author,
-    repo: Repo,
+    space: Space,
+    router: RouterClient,
     output: String,
 }
 
@@ -146,12 +165,13 @@ host_fn!(sleep(ctx: WasmContext; ms: u64) -> () {
 host_fn!(schema_load_or_create(ctx: WasmContext; data: String) -> Vec<u8> {
     let ctx = ctx.get()?;
     let ctx = ctx.lock().unwrap();
-    let schemas = ctx.repo.schemas();
+    let router = &ctx.router;
+    let schemas = ctx.space.schemas();
     let author = ctx.author.clone();
 
     tokio::task::block_in_place(|| {
         ctx.rt.block_on(async move {
-            let schema = schemas.load_or_create(author, data.into()).await.context("failed to load or create schema")?;
+            let schema = schemas.load_or_create(router, author, data.into()).await.context("failed to load or create schema")?;
             serde_json::to_vec(&schema).context("failed to serialize schema")
         })
     })
@@ -162,13 +182,14 @@ host_fn!(event_create(ctx: WasmContext; schema: String, data: String) -> Vec<u8>
     let ctx = ctx.lock().unwrap();
     let schema_hash = Hash::from_str(schema.as_str()).context("invalid schema hash")?;
     let author = ctx.author.clone();
-    let repo = ctx.repo.clone();
+    let space = ctx.space.clone();
     let parsed = serde_json::from_str::<serde_json::Value>(&data).context("parsing JSON")?;
+    let router = &ctx.router;
 
     tokio::task::block_in_place(|| {
         ctx.rt.block_on(async move {
-            let mut schema = repo.schemas().get_by_hash(schema_hash).await.context("loading schema")?;
-            let row = schema.create_row(&repo, author, parsed).await.context("failed to created row")?;
+            let mut schema = space.schemas().get_by_hash(router, schema_hash).await.context("loading schema")?;
+            let row = schema.create_row(router, &space, author, parsed).await.context("failed to created row")?;
             serde_json::to_vec(&row).context("failed to serialize event")
         })
     })
@@ -182,12 +203,13 @@ host_fn!(event_mutate(ctx: WasmContext; schema: String, id: String, data: String
     let schema = Hash::from_str(schema.as_str()).map_err(|_| anyhow!("invalid schema hash"))?;
     let id = Uuid::parse_str(id.clone().as_str()).map_err(|_| anyhow!("invalid id"))?;
     let author = ctx.author.clone();
-    let rows = ctx.repo.rows();
+    let rows = ctx.space.rows();
+    let router = &ctx.router;
 
     tokio::task::block_in_place(|| {
         ctx.rt.block_on(async move {
             let data = serde_json::from_str::<serde_json::Value>(data.as_str()).map_err(|e| anyhow!("failed to parse data: {}", e))?;
-            let event = rows.mutate(author, schema, id, data).await?;
+            let event = rows.mutate(router, author, schema, id, data).await?;
             let data = serde_json::to_vec(&event).map_err(|e| anyhow!("failed to serialize event: {}", e))?;
             data.to_bytes()
         })
@@ -199,11 +221,12 @@ host_fn!(event_query(ctx: WasmContext; schema: String, query: String) -> Vec<u8>
     let ctx = ctx.lock().unwrap();
 
     let schema = Hash::from_str(schema.as_str()).map_err(|_| anyhow!("invalid schema hash"))?;
-    let rows = ctx.repo.rows().clone();
+    let rows = ctx.space.rows().clone();
+    let router = &ctx.router;
 
     tokio::task::block_in_place(|| {
         ctx.rt.block_on(async move {
-            let res = rows.query(schema, query, 0, -1).await?;
+            let res = rows.query(router, schema, query, 0, -1).await?;
             let data = serde_json::to_vec(&res).map_err(|e| anyhow!("failed to serialize events: {}", e))?;
             data.to_bytes()
         })

@@ -9,7 +9,7 @@ use uuid::Uuid;
 use crate::router::RouterClient;
 
 use super::events::{Event, EventKind, EventObject, HashLink, Tag, NOSTR_ID_TAG};
-use super::Repo;
+use super::Space;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Profile {
@@ -84,11 +84,10 @@ impl User {
         Self::from_event(event, client).await
     }
 
-    pub async fn create(repo: &Repo, profile: Profile) -> Result<User> {
+    pub async fn create(router: &RouterClient, space: &Space, profile: Profile) -> Result<User> {
         let id = Uuid::new_v4();
-        let author_id = repo.router().authors().create().await?;
-        let author = repo
-            .router()
+        let author_id = router.authors().create().await?;
+        let author = router
             .authors()
             .export(author_id)
             .await?
@@ -96,7 +95,7 @@ impl User {
 
         // add profile to store
         let content = serde_json::to_vec(&profile)?;
-        let result = repo.router.blobs().add_bytes(content).await?;
+        let result = router.blobs().add_bytes(content).await?;
 
         // TODO(b5) - wat. why? you're doing something wrong with types.
         let pubkey = PublicKey::from_bytes(author.public_key().as_bytes())?;
@@ -114,20 +113,20 @@ impl User {
             author: Some(author.clone()),
         };
 
-        user.into_mutate_event(author)?.write(&repo.db).await?;
+        user.into_mutate_event(author)?.write(&space.db).await?;
         Ok(user)
     }
 }
 
-pub struct Users(Repo);
+pub struct Users(Space);
 
 impl Users {
-    pub fn new(repo: Repo) -> Self {
+    pub fn new(repo: Space) -> Self {
         Users(repo)
     }
 
-    pub async fn create(&self, profile: Profile) -> Result<User> {
-        User::create(&self.0, profile).await
+    pub async fn create(&self, router: &RouterClient, profile: Profile) -> Result<User> {
+        User::create(router, &self.0, profile).await
     }
 
     pub async fn mutate(&self, mut user: User) -> Result<User> {
@@ -141,8 +140,8 @@ impl Users {
         Ok(user)
     }
 
-    pub async fn authors(&self) -> Result<Vec<AuthorId>> {
-        let mut author_ids = self.0.router.authors().list().await?;
+    pub async fn authors(&self, router: &RouterClient) -> Result<Vec<AuthorId>> {
+        let mut author_ids = router.authors().list().await?;
         let mut authors = Vec::new();
         while let Some(author_id) = author_ids.next().await {
             let author_id = author_id?;
@@ -151,14 +150,14 @@ impl Users {
         Ok(authors)
     }
 
-    pub async fn list(&self, offset: i64, limit: i64) -> Result<Vec<User>> {
+    pub async fn list(&self, router: &RouterClient, offset: i64, limit: i64) -> Result<Vec<User>> {
         let conn = self.0.db.lock().await;
         let mut stmt = conn.prepare("SELECT id, pubkey, created_at, kind, schema, data_id, content, sig FROM events WHERE kind = ?1 LIMIT ?2 OFFSET ?3")?;
         let mut rows = stmt.query(params![EventKind::MutateUser, limit, offset])?;
 
         let mut users = Vec::new();
         while let Some(row) = rows.next()? {
-            let user = User::from_sql_row(row, &self.0.router).await?;
+            let user = User::from_sql_row(row, router).await?;
             users.push(user);
         }
 

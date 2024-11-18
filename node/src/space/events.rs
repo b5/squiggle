@@ -28,6 +28,8 @@ pub(crate) const EVENT_SQL_FIELDS: &str =
 pub enum EventKind {
     MutateUser,
     DeleteUser,
+    MutateSpace,
+    DeleteSpace,
     MutateProgram,
     DeleteProgram,
     MutateSchema,
@@ -43,12 +45,14 @@ impl EventKind {
         match self {
             EventKind::MutateUser => 100000,
             EventKind::DeleteUser => 100001,
-            EventKind::MutateProgram => 100002,
-            EventKind::DeleteProgram => 100003,
-            EventKind::MutateSchema => 100004,
-            EventKind::DeleteSchema => 100005,
-            EventKind::MutateRow => 100006,
-            EventKind::DeleteRow => 100007,
+            EventKind::MutateSpace => 100002,
+            EventKind::DeleteSpace => 100003,
+            EventKind::MutateProgram => 100004,
+            EventKind::DeleteProgram => 100005,
+            EventKind::MutateSchema => 100006,
+            EventKind::DeleteSchema => 100007,
+            EventKind::MutateRow => 100008,
+            EventKind::DeleteRow => 100009,
         }
     }
 }
@@ -65,12 +69,14 @@ impl FromSql for EventKind {
         match kind {
             100000 => Ok(EventKind::MutateUser),
             100001 => Ok(EventKind::DeleteUser),
-            100002 => Ok(EventKind::MutateProgram),
-            100003 => Ok(EventKind::DeleteProgram),
-            100004 => Ok(EventKind::MutateSchema),
-            100005 => Ok(EventKind::DeleteSchema),
-            100006 => Ok(EventKind::MutateRow),
-            100007 => Ok(EventKind::DeleteRow),
+            100002 => Ok(EventKind::MutateSpace),
+            100003 => Ok(EventKind::DeleteSpace),
+            100004 => Ok(EventKind::MutateProgram),
+            100005 => Ok(EventKind::DeleteProgram),
+            100006 => Ok(EventKind::MutateSchema),
+            100007 => Ok(EventKind::DeleteSchema),
+            100008 => Ok(EventKind::MutateRow),
+            100009 => Ok(EventKind::DeleteRow),
             _ => Err(rusqlite::types::FromSqlError::OutOfRange(kind.into())),
         }
     }
@@ -94,12 +100,14 @@ impl<'de> Deserialize<'de> for EventKind {
         match kind {
             100000 => Ok(EventKind::MutateUser),
             100001 => Ok(EventKind::DeleteUser),
-            100002 => Ok(EventKind::MutateProgram),
-            100003 => Ok(EventKind::DeleteProgram),
-            100004 => Ok(EventKind::MutateSchema),
-            100005 => Ok(EventKind::DeleteSchema),
-            100006 => Ok(EventKind::MutateRow),
-            100007 => Ok(EventKind::DeleteRow),
+            100002 => Ok(EventKind::MutateSpace),
+            100003 => Ok(EventKind::DeleteSpace),
+            100004 => Ok(EventKind::MutateProgram),
+            100005 => Ok(EventKind::DeleteProgram),
+            100006 => Ok(EventKind::MutateSchema),
+            100007 => Ok(EventKind::DeleteSchema),
+            100008 => Ok(EventKind::MutateRow),
+            100009 => Ok(EventKind::DeleteRow),
             _ => Err(serde::de::Error::custom(format!(
                 "Unknown event kind: {}",
                 kind

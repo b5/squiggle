@@ -179,7 +179,8 @@ export function main() {
   const { org, repo, token } = config();
 
   let schema = loadOrCreateSchema(githubUsersSchema);
-  log(`Schema loaded: ${schema.title} ${schema.content.hash}`);
+  let hash = (typeof schema.content === 'string') ? schema.content : schema.content.hash;
+  log(`Schema loaded: ${schema.title} ${hash}`);
   log(JSON.stringify(schema));
 
   // build a db shim

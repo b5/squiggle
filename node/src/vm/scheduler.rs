@@ -18,8 +18,8 @@ use super::job::{
     JobDescription, JobResult, JobResultStatus, JobStatus, ScheduledJob, JOBS_PREFIX,
 };
 use super::metrics::Metrics;
+use super::node_author_id;
 use super::worker::{ExecutionStatus, WorkerEvent};
-use super::workspace::node_author_id;
 
 #[derive(Clone, Debug)]
 pub struct Scheduler {

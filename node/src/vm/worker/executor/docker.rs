@@ -5,7 +5,8 @@ use bollard::container::LogOutput;
 use futures::StreamExt;
 use tracing::{debug, info};
 
-use crate::repo::Repo;
+use crate::router::RouterClient;
+use crate::space::Spaces;
 
 use crate::vm::{
     blobs::Blobs,
@@ -17,21 +18,28 @@ use super::Executor;
 
 #[derive(Debug, Clone)]
 pub struct Docker {
+    spaces: Spaces,
+    router: RouterClient,
     docker: bollard::Docker,
-    repo: Repo,
     blobs: Blobs,
     /// Root folder to store shared files in
     root: PathBuf,
 }
 
 impl Docker {
-    pub async fn new(repo: Repo, blobs: Blobs, root: PathBuf) -> Result<Self> {
+    pub async fn new(
+        spaces: Spaces,
+        router: RouterClient,
+        blobs: Blobs,
+        root: PathBuf,
+    ) -> Result<Self> {
         let docker = get_docker().await?;
         tokio::fs::create_dir_all(&root).await?;
         let root = root.canonicalize()?;
 
         Ok(Self {
-            repo,
+            spaces,
+            router,
             docker,
             blobs,
             root,
@@ -48,7 +56,7 @@ impl Executor for Docker {
         let uploads_path = ctx.uploads_path(&self.root);
 
         debug!("downloading artifacts to {}", downloads_path.display());
-        ctx.write_downloads(&downloads_path, &self.blobs, self.repo.router())
+        ctx.write_downloads(&downloads_path, &self.blobs, &self.router)
             .await?;
 
         // TODO: parallelize with artifact writing
@@ -152,7 +160,7 @@ impl Executor for Docker {
 
         debug!("uploading artifacts from {}", uploads_path.display());
         // TODO: parallelize the with container stopping
-        ctx.read_uploads(&uploads_path, &self.blobs, self.repo.router())
+        ctx.read_uploads(&uploads_path, &self.blobs, &self.router)
             .await?;
 
         debug!("stopping container");
