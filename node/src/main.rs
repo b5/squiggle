@@ -9,7 +9,20 @@ use datalayer_node::space::programs::Manifest;
 async fn main() -> Result<()> {
     let path = datalayer_node::node::data_root()?;
     let node = Node::open(path).await?;
-    let space = node.spaces().clone().get_or_create("personal").await?;
+
+    let authors = node.accounts().await?;
+    let author = node
+        .router()
+        .authors()
+        .export(authors[0])
+        .await?
+        .expect("author to exist");
+
+    let space = node
+        .spaces()
+        .clone()
+        .get_or_create(node.router(), author.clone(), "personal", "my first space")
+        .await?;
     // let events = node.repo().list_events().await?;
     // let b5 = node
     //     .repo()
@@ -20,13 +33,6 @@ async fn main() -> Result<()> {
     //         String::from(""),
     //     )
     //     .await?;
-    let authors = space.users().authors(node.router()).await?;
-    let author = node
-        .router()
-        .authors()
-        .export(authors[0])
-        .await?
-        .expect("author to exist");
 
     // running a flow from a file:
     // let mut flow =

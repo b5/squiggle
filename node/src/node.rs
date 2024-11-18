@@ -2,6 +2,8 @@ use std::env;
 use std::path::PathBuf;
 
 use anyhow::{anyhow, Result};
+use futures::StreamExt;
+use iroh::docs::AuthorId;
 use iroh::util::path::IrohPaths;
 use tokio::task::JoinHandle;
 
@@ -51,6 +53,16 @@ impl Node {
 
     pub fn vm(&self) -> &VM {
         &self.vm
+    }
+
+    pub async fn accounts(&self) -> Result<Vec<AuthorId>> {
+        let mut author_ids = self.router.authors().list().await?;
+        let mut authors = Vec::new();
+        while let Some(author_id) = author_ids.next().await {
+            let author_id = author_id?;
+            authors.push(author_id);
+        }
+        Ok(authors)
     }
 
     pub async fn gateway(&self, serve_addr: &str) -> Result<JoinHandle<()>> {

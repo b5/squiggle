@@ -1,5 +1,4 @@
 use anyhow::{anyhow, Result};
-use futures::StreamExt;
 use iroh::docs::{Author, AuthorId};
 use iroh::net::key::PublicKey;
 use rusqlite::params;
@@ -138,16 +137,6 @@ impl Users {
         let event = user.into_mutate_event(author)?;
         event.write(&self.0.db).await?;
         Ok(user)
-    }
-
-    pub async fn authors(&self, router: &RouterClient) -> Result<Vec<AuthorId>> {
-        let mut author_ids = router.authors().list().await?;
-        let mut authors = Vec::new();
-        while let Some(author_id) = author_ids.next().await {
-            let author_id = author_id?;
-            authors.push(author_id);
-        }
-        Ok(authors)
     }
 
     pub async fn list(&self, router: &RouterClient, offset: i64, limit: i64) -> Result<Vec<User>> {

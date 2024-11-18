@@ -3,9 +3,11 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::Result;
-use iroh::docs::{NamespaceId, NamespaceSecret};
+use iroh::docs::{Author, NamespaceId, NamespaceSecret};
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
+
+use crate::router::RouterClient;
 
 use self::db::{open_db, setup_db, DB};
 
@@ -91,20 +93,42 @@ impl Spaces {
         })
     }
 
-    pub async fn get_or_create(&mut self, name: &str) -> Result<Space> {
+    pub async fn get_or_create(
+        &mut self,
+        router: &RouterClient,
+        author: Author,
+        name: &str,
+        description: &str,
+    ) -> Result<Space> {
         if let Some(space) = self.get(name).await {
             return Ok(space);
         }
-        self.create(name).await
+        self.create(router, author, name, description).await
     }
 
-    pub async fn create(&mut self, name: &str) -> Result<Space> {
+    pub async fn create(
+        &mut self,
+        router: &RouterClient,
+        author: Author,
+        name: &str,
+        description: &str,
+    ) -> Result<Space> {
         let secret = NamespaceSecret::new(&mut rand::thread_rng());
         let new = SpaceDetails {
             name: name.to_string(),
             secret: secret.clone(),
         };
         let space = Space::open(name.to_string(), secret, self.path.clone()).await?;
+        space_events::SpaceEvents::new(space.clone())
+            .create(
+                router,
+                author,
+                space_events::SpaceDetails {
+                    title: name.to_string(),
+                    description: description.to_string(),
+                },
+            )
+            .await?;
         let mut spaces = self.spaces.write().await;
         spaces.insert(name.to_string().clone(), space.clone());
 

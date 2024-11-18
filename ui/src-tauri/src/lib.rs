@@ -4,10 +4,10 @@ use std::sync::Arc;
 use std::collections::HashMap;
 
 use datalayer_node::node::Node;
-use datalayer_node::repo::programs::Program;
-use datalayer_node::repo::rows::Row;
-use datalayer_node::repo::schemas::Schema;
-use datalayer_node::repo::users::User;
+use datalayer_node::space::programs::Program;
+use datalayer_node::space::rows::Row;
+use datalayer_node::space::schemas::Schema;
+use datalayer_node::space::users::User;
 use datalayer_node::vm::flow::TaskOutput;
 use datalayer_node::vm::DEFAULT_WORKSPACE;
 use datalayer_node::Hash;
@@ -107,7 +107,7 @@ pub fn run() {
             Ok(())
         })
         .manage(Arc::new(node))
-        .invoke_handler(tauri::generate_handler![navigate, accounts_list, programs_list, program_run, schemas_list, schemas_get, rows_query])
+        .invoke_handler(tauri::generate_handler![navigate, accounts_list, programs_list, schemas_list, schemas_get, rows_query])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
@@ -179,19 +179,19 @@ async fn programs_list(node: tauri::State<'_, Arc<Node>>, offset: i64, limit: i6
     })
 }
 
-#[tauri::command]
-async fn program_run(node: tauri::State<'_, Arc<Node>>, id: &str, environment: HashMap<String, String>) -> Result<TaskOutput, String> {
-    let id = uuid::Uuid::parse_str(id).map_err(|e| e.to_string())?;
-    let node = node.clone();
-    tokio::task::block_in_place(|| {
-        tauri::async_runtime::block_on(async move {
-            let author_id = node.repo().users().authors().await.map_err(|e| e.to_string())?.pop().ok_or("no author").map_err(
-                |e| e.to_string())?;
-            let author = node.repo().router().authors().export(author_id).await.map_err(|e| e.to_string())?.expect("author to exist");
-            node.vm().run_program(DEFAULT_WORKSPACE, author, id, environment).await.map_err(|e| e.to_string())
-        })
-    })
-}
+// #[tauri::command]
+// async fn program_run(node: tauri::State<'_, Arc<Node>>, id: &str, environment: HashMap<String, String>) -> Result<TaskOutput, String> {
+//     let id = uuid::Uuid::parse_str(id).map_err(|e| e.to_string())?;
+//     let node = node.clone();
+//     tokio::task::block_in_place(|| {
+//         tauri::async_runtime::block_on(async move {
+//             let author_id = node.repo().users().authors().await.map_err(|e| e.to_string())?.pop().ok_or("no author").map_err(
+//                 |e| e.to_string())?;
+//             let author = node.repo().router().authors().export(author_id).await.map_err(|e| e.to_string())?.expect("author to exist");
+//             node.vm().run_program(DEFAULT_WORKSPACE, author, id, environment).await.map_err(|e| e.to_string())
+//         })
+//     })
+// }
 
 #[tauri::command]
 async fn schemas_list(node: tauri::State<'_, Arc<Node>>) -> Result<Vec<Schema>, String> {
