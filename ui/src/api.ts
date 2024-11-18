@@ -22,7 +22,7 @@ function ApiFactory<I, O>(method_name: string): ((i: I) => ApiEnvelope<O>) {
   }
 }
 
-export interface Pagniation {
+export interface Pagination {
   offset?: number;
   limit?: number;
 }
@@ -38,5 +38,5 @@ export interface Event {
   data: string;
 }
 
-export const useListSchemas = ApiFactory<Pagniation, [Schema]>("schemas_list");
-export const useQueryEvents = ApiFactory<{ schema: string, offset: number, limit: number }, [Event]>("events_query");
+export const useListSchemas = ApiFactory<Pagination, [Schema]>("schemas_list");
+export const useQueryRows = ApiFactory<{ schema: string } & Pagination, [Event]>("rows_query");

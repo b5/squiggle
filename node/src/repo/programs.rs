@@ -18,19 +18,19 @@ use super::tickets::ProgramTicket;
 use super::Repo;
 use crate::router::RouterClient;
 
-const MANIFEST_FILENAME: &str = "package.json";
+const MANIFEST_FILENAME: &str = "program.json";
 const DEFAULT_PROGRAM_ENTRY_FILENAME: &str = "index.wasm";
 const HTML_INDEX_FILENAME: &str = "index.html";
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Manifest {
-    name: String,
-    version: String,
-    description: Option<String>,
-    homepage: Option<String>,
-    repository: Option<String>,
-    license: Option<String>,
-    main: Option<String>,
+    pub name: String,
+    pub version: String,
+    pub description: Option<String>,
+    pub homepage: Option<String>,
+    pub repository: Option<String>,
+    pub license: Option<String>,
+    pub main: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -125,6 +125,11 @@ impl Programs {
         Programs(repo)
     }
 
+    pub async fn create(&self, author: Author, path: impl Into<PathBuf>) -> Result<Program> {
+        let id = Uuid::new_v4();
+        self.mutate(author, id, path).await
+    }
+
     pub async fn mutate(
         &self,
         author: Author,
@@ -156,10 +161,7 @@ impl Programs {
             author: PublicKey::from_bytes(author.public_key().as_bytes())?,
             created_at: chrono::Utc::now().timestamp(),
             manifest,
-            content: HashLink {
-                hash,
-                value: None,
-            },
+            content: HashLink { hash, value: None },
             html_index,
             program_entry,
         };
@@ -239,12 +241,25 @@ impl Programs {
         Program::from_event(event, router).await
     }
 
+    pub async fn get_by_name(&self, name: String) -> Result<Program> {
+        // TODO (b5) - I know. this is terrible
+        self.list(0, -1)
+            .await?
+            .into_iter()
+            .find(|program| program.manifest.name == name)
+            .ok_or_else(|| anyhow!("Program not found"))
+    }
+
     pub async fn get_by_id(&self, id: Uuid) -> Result<Program> {
         let conn = self.0.db.lock().await;
+        println!("getting program: {:?}", id);
         let mut stmt = conn
-            .prepare("SELECT () FROM events WHERE id = ?1")
+            .prepare(
+                format!("SELECT {EVENT_SQL_FIELDS} FROM events WHERE kind = ?1 AND data_id = ?2")
+                    .as_str(),
+            )
             .context("selecting Program by id from events table")?;
-        let mut rows = stmt.query([id])?;
+        let mut rows = stmt.query(params![EventKind::MutateProgram, id])?;
 
         if let Some(row) = rows.next()? {
             Program::from_sql_row(row, self.0.router()).await

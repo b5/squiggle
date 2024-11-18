@@ -17,10 +17,11 @@ export function Component() {
         <h1 className="text-xl font-bold">Local Data</h1>
         <p className="text-sm">data stored on your local device</p>
       </div>
-      {data?.map((schema) => {
+      {data?.map((schema, i) => {
         return (
-          <div key={schema.hash} className="p-2 border-b">
-            <Link to={`/data/${schema.hash}`} className="cursor-pointer">{schema.title}</Link>
+          <div key={i} className="p-2 border-b">
+            <Link to={`/data/${schema.content.hash}`} className="cursor-pointer">{schema.title}</Link>
+            <span>{JSON.stringify(schema)}</span>
           </div>
         )
       })}

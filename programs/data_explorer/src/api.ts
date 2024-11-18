@@ -22,22 +22,26 @@ function ApiFactory<I, O>(method_name: string): ((i: I) => ApiEnvelope<O>) {
   }
 }
 
-export interface Pagniation {
+export interface Pagination {
   offset?: number;
   limit?: number;
 }
 
-export interface Schema {
+export interface HashLink {
   hash: string;
+  value?: any;
+}
+
+export interface Schema {
   name: string;
   description: string;
+  content: HashLink;
 }
 
-export interface Event {
-  hash: string;
-  data: string;
+export interface Row {
+  content: HashLink;
 }
 
-export const useQuerySchemas = ApiFactory<Pagniation, [Schema]>("schemas_list");
+export const useQuerySchemas = ApiFactory<Pagination, [Schema]>("schemas_list");
 export const useQuerySchema = ApiFactory<{ schema: string }, Schema>("schemas_get");
-export const useQueryEvents = ApiFactory<{ schema: string, offset: number, limit: number }, [Event]>("events_query");
+export const useQueryRows = ApiFactory<{ schema: string } & Pagination, [Row]>("rows_query");

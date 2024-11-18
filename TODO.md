@@ -23,14 +23,17 @@ High Level Requirements:
   * [ ] program constructor function in repo
     * [x] node CLI command for building programs
   * [x] become browser
+* [ ] Sunday Nov 17
+  * [ ] execute programs from iroh collection source
+  * [ ] List Programs within UI
+  * [ ] Share Program via ticket
+  * [ ] Fetch Program via ticket (in UI)
+  * [ ] Execute program
+  * [ ] Bullet-point overview of system design
 * [ ] Thu Nov 14 - Ticket-Based Share flow
   * [ ] std schemas
-    * [ ] Move App config to schema
-    * [ ] 
-  * [ ] List Programs
   * [ ] Construct Blob of events
   * [ ] Add events from ticket
-  * [ ] Share Program via ticket
 * [ ] Fri Nov 15 - Demo for team
   * [ ] inline small amounts of content into events table in JSON format 
 

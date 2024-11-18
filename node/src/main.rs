@@ -1,6 +1,9 @@
+use std::collections::HashMap;
+
 use anyhow::Result;
 
 use datalayer_node::node::Node;
+use datalayer_node::repo::programs::Manifest;
 use datalayer_node::vm::DEFAULT_WORKSPACE;
 
 #[tokio::main]
@@ -18,22 +21,63 @@ async fn main() -> Result<()> {
     //     )
     //     .await?;
     let authors = node.repo().users().authors().await?;
+    let author = node
+        .repo()
+        .router()
+        .authors()
+        .export(authors[0])
+        .await?
+        .expect("author to exist");
 
-    let mut flow =
-        datalayer_node::vm::flow::Flow::load("../programs/github_repo_stargazers/stargazers.toml")
-            .await?;
-    flow.tasks
-        .iter_mut()
-        .for_each(|task| task.description.author = authors[0].to_string());
+    // running a flow from a file:
+    // let mut flow =
+    //     datalayer_node::vm::flow::Flow::load("../programs/github_repo_stargazers/stargazers.toml")
+    //         .await?;
+    // flow.tasks
+    //     .iter_mut()
+    //     .for_each(|task| task.description.author = authors[0].to_string());
+    // let res = node.vm().run_flow(DEFAULT_WORKSPACE, flow).await?;
 
-    let res = node.vm().run(DEFAULT_WORKSPACE, flow).await?;
+    // importing a program & running:
+    let file = tokio::fs::read("../programs/github_repo_stargazers/dist/program.json").await?;
+    let manifest: Manifest = serde_json::from_slice(file.as_slice())?;
+
+    let program = match node.repo().programs().get_by_name(manifest.name).await {
+        Ok(program) => program,
+        Err(_) => {
+            node.repo()
+                .programs()
+                .create(author.clone(), "../programs/github_repo_stargazers/dist")
+                .await?
+        }
+    };
+
+    node.repo()
+        .router()
+        .blobs()
+        .get_collection(program.content.hash)
+        .await?
+        .iter()
+        .for_each(|el| {
+            println!("blob: {:?}", el);
+        });
+
+    node.repo()
+        .programs()
+        .list(0, -1)
+        .await?
+        .into_iter()
+        .for_each(|p| println!("{} {}", p.manifest.name, p.id));
+
+    let mut cfg = HashMap::new();
+    cfg.insert("org".to_string(), "n0-computer".to_string());
+    cfg.insert("repo".to_string(), "awesome-iroh".to_string());
+    cfg.insert("github_token".to_string(), "TOKEN_HERE".to_string());
+
+    let res = node
+        .vm()
+        .run_program(DEFAULT_WORKSPACE, author, program.id, cfg)
+        .await?;
     println!("Flow output: {:?}", res);
-    // println!(
-    //     "Hello, world: {:?} events: {:?} users: {:?}",
-    //     node.name,
-    //     events,
-    //     // b5,
-    //     node.repo().users().list().await?
-    // );
     Ok(())
 }

@@ -180,6 +180,7 @@ export function main() {
 
   let schema = loadOrCreateSchema(githubUsersSchema);
   log(`Schema loaded: ${schema.title} ${schema.content.hash}`);
+  log(JSON.stringify(schema));
 
   // build a db shim
   const db = {

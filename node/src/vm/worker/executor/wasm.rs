@@ -10,6 +10,7 @@ use uuid::Uuid;
 
 use crate::repo::Repo;
 use crate::vm::blobs::Blobs;
+use crate::vm::job::Source;
 
 use super::Executor;
 
@@ -49,10 +50,16 @@ impl Executor for WasmExecutor {
             .await
             .context("write downloads")?;
 
-        let path = Wasm::file(downloads_path.join(&job.module));
+        let program = match job.module {
+            Source::LocalBlob(hash) => {
+                let result = self.repo.router().blobs().read_to_bytes(hash).await?;
+                Wasm::data(result)
+            }
+            Source::LocalPath(path) => Wasm::file(downloads_path.join(&path)),
+        };
         let env = ctx.environment.clone().into_iter();
 
-        let manifest = Manifest::new([path])
+        let manifest = Manifest::new([program])
             .with_allowed_host("*")
             .with_config(env);
 
@@ -106,7 +113,7 @@ impl Executor for WasmExecutor {
 #[derive(Debug)]
 pub struct Job {
     /// Module file path
-    pub module: String,
+    pub module: Source,
 }
 
 #[derive(Debug)]

@@ -223,7 +223,7 @@ impl std::str::FromStr for Flow {
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Task {
     #[serde(default)]
-    tasks: Vec<Task>,
+    pub(crate) tasks: Vec<Task>,
     pub description: JobDescription,
 }
 
@@ -422,8 +422,9 @@ mod tests {
             tasks: vec![Task {
                 description: JobDescription {
                     name: "job".into(),
+                    environment: Default::default(),
                     details: JobDetails::Wasm {
-                        module: "foo.wasm".into(),
+                        module: Source::LocalPath("foo.wasm".into()),
                     },
                     artifacts: Default::default(),
                     timeout: DEFAULT_TIMEOUT,
@@ -431,6 +432,7 @@ mod tests {
                 tasks: vec![Task {
                     description: JobDescription {
                         name: "job-nested".into(),
+                        environment: Default::default(),
                         details: JobDetails::Docker {
                             image: "docker-image".into(),
                             command: vec!["ls".into()],

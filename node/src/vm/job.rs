@@ -88,6 +88,12 @@ impl JobStatus {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
+pub enum Source {
+    LocalPath(String),
+    LocalBlob(iroh::blobs::Hash),
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
 pub enum JobDetails {
     /// Run a job inside of a docker container.
     #[serde(rename = "docker")]
@@ -101,7 +107,7 @@ pub enum JobDetails {
     Wasm {
         /// Path to the compiled `.wasm` module.
         /// Expects to be a wasi module
-        module: String,
+        module: Source,
     },
 }
 
@@ -482,6 +488,7 @@ mod tests {
         let job = JobDescription {
             author: author_id,
             name: "foo".into(),
+            environment: Default::default(),
             details: JobDetails::Docker {
                 image: "alpine:latest".into(),
                 command: vec!["ls".into()],

@@ -4,8 +4,9 @@ use std::sync::Arc;
 
 use datalayer_node::node::Node;
 use datalayer_node::repo::users::User;
-use datalayer_node::repo::events::Event;
+use datalayer_node::repo::rows::Row;
 use datalayer_node::repo::schemas::Schema;
+use datalayer_node::repo::programs::Program;
 use datalayer_node::vm::flow::{Flow, FlowOutput};
 use datalayer_node::Hash;
 use tauri::{Runtime, LogicalPosition, LogicalSize, WebviewUrl, Listener};
@@ -104,7 +105,7 @@ pub fn run() {
             Ok(())
         })
         .manage(Arc::new(node))
-        .invoke_handler(tauri::generate_handler![navigate, accounts_list, schemas_list, schemas_get, events_query, run_flow])
+        .invoke_handler(tauri::generate_handler![navigate, accounts_list, schemas_list, schemas_get, rows_query, run_flow])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
@@ -155,9 +156,25 @@ async fn navigate<R: Runtime>(window: tauri::Window<R>, url: &str) -> Result<(),
 #[tauri::command]
 async fn accounts_list(
     node: tauri::State<'_, Arc<Node>>,
+    offset: i64,
+    limit: i64,
 ) -> Result<Vec<User>, String> {
-    let users = node.repo().users().list().await.map_err(|e| e.to_string())?;
-    Ok(users)
+    let node = node.clone();
+    tokio::task::block_in_place(|| {
+        tauri::async_runtime::block_on(async move {
+            node.repo().users().list(offset, limit).await.map_err(|e| e.to_string())
+        })
+    })      
+}
+
+#[tauri::command]
+async fn programs_list(node: tauri::State<'_, Arc<Node>>, offset: i64, limit: i64) -> Result<Vec<Program>, String> {
+    let node = node.clone();
+    tokio::task::block_in_place(|| {
+        tauri::async_runtime::block_on(async move {
+            node.repo().schemas().list(0, -1).await.map_err(|e| e.to_string())
+        })
+    })
 }
 
 #[tauri::command]
@@ -182,12 +199,12 @@ async fn schemas_get(node: tauri::State<'_, Arc<Node>>, schema: &str) -> Result<
 }
 
 #[tauri::command]
-async fn events_query(node: tauri::State<'_, Arc<Node>>, schema: &str, offset: i64, limit: i64) -> Result<Vec<Event>, String> {
+async fn rows_query(node: tauri::State<'_, Arc<Node>>, schema: &str, offset: i64, limit: i64) -> Result<Vec<Row>, String> {
     let node = node.clone();
     let schema_hash = Hash::from_str(schema).map_err(|e| e.to_string())?;
     tokio::task::block_in_place(|| {
         tauri::async_runtime::block_on(async move {
-            node.repo().events().query(schema_hash, String::from(""), offset, limit).await.map_err(|e| e.to_string())
+            node.repo().rows().query(schema_hash, String::from(""), offset, limit).await.map_err(|e| e.to_string())
         })
     })
 }
