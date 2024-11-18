@@ -20,8 +20,8 @@ const router = createHashRouter([
         lazy: () => import('./table')
       },
       {
-        path: 'bots',
-        lazy: () => import('./bots'),
+        path: 'programs',
+        lazy: () => import('./programs'),
       },
     ],
   },

@@ -191,4 +191,5 @@ export function main() {
 
   const checked = fetchAllStargazers(db, org, repo, token);
   log(`Done! Checked ${checked} stargazers.`);
+  return 0;
 }

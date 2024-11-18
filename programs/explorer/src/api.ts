@@ -1,6 +1,13 @@
 import { useEffect, useState } from "react";
 import { invoke, InvokeArgs } from "@tauri-apps/api/core";
 
+import { User, Program, Schema, Row } from "@/types";
+
+export interface Pagination {
+  offset?: number;
+  limit?: number;
+}
+
 export interface ApiEnvelope<O> {
   isLoading: boolean;
   data?: O;
@@ -22,26 +29,9 @@ function ApiFactory<I, O>(method_name: string): ((i: I) => ApiEnvelope<O>) {
   }
 }
 
-export interface Pagination {
-  offset?: number;
-  limit?: number;
-}
-
-export interface HashLink {
-  hash: string;
-  value?: any;
-}
-
-export interface Schema {
-  name: string;
-  description: string;
-  content: HashLink;
-}
-
-export interface Row {
-  content: HashLink;
-}
-
+export const useQueryUser = ApiFactory<Pagination, [User]>("users_list");
+export const useQueryPrograms = ApiFactory<Pagination, [Program]>("programs_list");
+export const useRunProgram = ApiFactory<{ id: string }, Program>("programs_run");
 export const useQuerySchemas = ApiFactory<Pagination, [Schema]>("schemas_list");
 export const useQuerySchema = ApiFactory<{ schema: string }, Schema>("schemas_get");
 export const useQueryRows = ApiFactory<{ schema: string } & Pagination, [Row]>("rows_query");

@@ -1,13 +1,15 @@
 use std::cmp::Ordering;
 use std::str::FromStr;
 use std::sync::Arc;
+use std::collections::HashMap;
 
 use datalayer_node::node::Node;
-use datalayer_node::repo::users::User;
+use datalayer_node::repo::programs::Program;
 use datalayer_node::repo::rows::Row;
 use datalayer_node::repo::schemas::Schema;
-use datalayer_node::repo::programs::Program;
-use datalayer_node::vm::flow::{Flow, FlowOutput};
+use datalayer_node::repo::users::User;
+use datalayer_node::vm::flow::TaskOutput;
+use datalayer_node::vm::DEFAULT_WORKSPACE;
 use datalayer_node::Hash;
 use tauri::{Runtime, LogicalPosition, LogicalSize, WebviewUrl, Listener};
 use tauri::webview::PageLoadEvent;
@@ -105,7 +107,7 @@ pub fn run() {
             Ok(())
         })
         .manage(Arc::new(node))
-        .invoke_handler(tauri::generate_handler![navigate, accounts_list, schemas_list, schemas_get, rows_query, run_flow])
+        .invoke_handler(tauri::generate_handler![navigate, accounts_list, programs_list, program_run, schemas_list, schemas_get, rows_query])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
@@ -172,7 +174,21 @@ async fn programs_list(node: tauri::State<'_, Arc<Node>>, offset: i64, limit: i6
     let node = node.clone();
     tokio::task::block_in_place(|| {
         tauri::async_runtime::block_on(async move {
-            node.repo().schemas().list(0, -1).await.map_err(|e| e.to_string())
+            node.repo().programs().list(offset, limit).await.map_err(|e| e.to_string())
+        })
+    })
+}
+
+#[tauri::command]
+async fn program_run(node: tauri::State<'_, Arc<Node>>, id: &str, environment: HashMap<String, String>) -> Result<TaskOutput, String> {
+    let id = uuid::Uuid::parse_str(id).map_err(|e| e.to_string())?;
+    let node = node.clone();
+    tokio::task::block_in_place(|| {
+        tauri::async_runtime::block_on(async move {
+            let author_id = node.repo().users().authors().await.map_err(|e| e.to_string())?.pop().ok_or("no author").map_err(
+                |e| e.to_string())?;
+            let author = node.repo().router().authors().export(author_id).await.map_err(|e| e.to_string())?.expect("author to exist");
+            node.vm().run_program(DEFAULT_WORKSPACE, author, id, environment).await.map_err(|e| e.to_string())
         })
     })
 }
@@ -207,16 +223,4 @@ async fn rows_query(node: tauri::State<'_, Arc<Node>>, schema: &str, offset: i64
             node.repo().rows().query(schema_hash, String::from(""), offset, limit).await.map_err(|e| e.to_string())
         })
     })
-}
-
-#[tauri::command]
-async fn run_flow(node: tauri::State<'_, Arc<Node>>, path: &str) -> Result<FlowOutput, String> {
-    println!("Current working directory: {:?} running flow: {:?}", std::env::current_dir().unwrap(), path);
-    let flow = Flow::load(path).await.map_err(|e| e.to_string())?;
-    let output = node
-        .vm()
-        .run("default", flow)
-        .await
-        .map_err(|e| e.to_string())?;
-    Ok(output)
 }

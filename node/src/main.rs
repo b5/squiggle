@@ -52,31 +52,14 @@ async fn main() -> Result<()> {
         }
     };
 
-    node.repo()
-        .router()
-        .blobs()
-        .get_collection(program.content.hash)
-        .await?
-        .iter()
-        .for_each(|el| {
-            println!("blob: {:?}", el);
-        });
-
-    node.repo()
-        .programs()
-        .list(0, -1)
-        .await?
-        .into_iter()
-        .for_each(|p| println!("{} {}", p.manifest.name, p.id));
-
-    let mut cfg = HashMap::new();
-    cfg.insert("org".to_string(), "n0-computer".to_string());
-    cfg.insert("repo".to_string(), "awesome-iroh".to_string());
-    cfg.insert("github_token".to_string(), "TOKEN_HERE".to_string());
+    let mut env = HashMap::new();
+    env.insert("org".to_string(), "n0-computer".to_string());
+    env.insert("repo".to_string(), "awesome-iroh".to_string());
+    env.insert("github_token".to_string(), "TOKEN_HERE".to_string());
 
     let res = node
         .vm()
-        .run_program(DEFAULT_WORKSPACE, author, program.id, cfg)
+        .run_program(DEFAULT_WORKSPACE, author, program.id, env)
         .await?;
     println!("Flow output: {:?}", res);
     Ok(())

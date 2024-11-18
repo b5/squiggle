@@ -60,21 +60,21 @@ export function CommandDialogMenu({ navigate }: { navigate: (to: string) => void
           </CommandItem>
         </CommandGroup>
         <CommandGroup heading="Suggestions">
-          <CommandItem value="calendar" onSelect={navHandler("https://youtube.com")}>
+          <CommandItem value="calendar" onSelect={navHandler("cozy://localhost:5173#programs")}>
             <Calendar />
-            <span>Calendar</span>
+            <span>Programs</span>
           </CommandItem>
-          <CommandItem value="emoji" onSelect={navHandler("https://apple.com")}>
+          <CommandItem value="emoji" onSelect={navHandler("cozy://localhost:5173#data")}>
             <Smile />
-            <span>Search Emoji</span>
+            <span>Data</span>
           </CommandItem>
-          <CommandItem value="https://n0.computer" onSelect={navigate}>
+          <CommandItem value="accounts" onSelect={navHandler("cozy://localhost:5173")}>
             <Calculator />
-            <span>Calculator</span>
+            <span>Accounts</span>
           </CommandItem>
         </CommandGroup>
         <CommandSeparator />
-        <CommandGroup heading="Settings">
+        {/* <CommandGroup heading="Settings">
           <CommandItem>
             <User />
             <span>Profile</span>
@@ -90,7 +90,7 @@ export function CommandDialogMenu({ navigate }: { navigate: (to: string) => void
             <span>Settings</span>
             <CommandShortcut>⌘S</CommandShortcut>
           </CommandItem>
-        </CommandGroup>
+        </CommandGroup> */}
       </CommandList>
     </CommandDialog>
   )

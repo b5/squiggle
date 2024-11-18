@@ -9,8 +9,8 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarTrigger,
 } from "@/components/ui/sidebar"
+import { Link } from "react-router-dom"
 
 // Menu items.
 const items = [
@@ -18,6 +18,11 @@ const items = [
     title: "Home",
     url: "/",
     icon: Home,
+  },
+  {
+    title: "Programs",
+    url: "/programs",
+    icon: Bot
   },
   {
     title: "People",
@@ -28,19 +33,13 @@ const items = [
     title: "Data",
     url: "/data",
     icon: HardDrive,
-  },
-  {
-    title: "Bots",
-    url: "/bots",
-    icon: Bot
   }
 ]
 
 export function AppSidebar() {
   return (
-    <Sidebar variant="floating">
+    <Sidebar>
       <SidebarContent>
-        <SidebarTrigger />
         <SidebarGroup>
           <SidebarGroupLabel>Application</SidebarGroupLabel>
           <SidebarGroupContent>
@@ -48,10 +47,10 @@ export function AppSidebar() {
               {items.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild>
-                    <div>
+                    <Link to={item.url}>
                       <item.icon />
                       <span>{item.title}</span>
-                    </div>
+                    </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
