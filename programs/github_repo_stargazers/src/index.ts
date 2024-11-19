@@ -1,4 +1,4 @@
-import { log, sleep, query, addEntry, Entry, loadOrCreateSchema, Schema } from "./library";
+import { log, sleep, query, addEntry, Row, loadOrCreateSchema, Schema } from "./library";
 
 let githubUsersSchema = {
   "title": "github_users",
@@ -31,8 +31,8 @@ let githubUsersSchema = {
 // silly shim coming from an sqlite-backed version of this example
 interface DB {
   githubUsersSchema(): Schema;
-  query(schema: Schema, query: string): Entry[];
-  addEntry(schema: Schema, entry: any): Entry;
+  query(schema: Schema, query: string): Row[];
+  addEntry(schema: Schema, entry: any): Row;
 }
 
 function fetchAllStargazers(db: DB, org: string, repo: string, token: string) {
@@ -50,7 +50,14 @@ function fetchAllStargazers(db: DB, org: string, repo: string, token: string) {
   // build map of updated_at by id
   const updated_at = new Map<string, string>();
   for (const user of users) {
-    updated_at.set(user.id, user.data.updated_at);
+    if (!user.content) {
+      log(`user.content is null: ${JSON.stringify(user)}`);
+      continue;
+    } else if (typeof user.content === 'string') {
+      log(`user.content.data is null: ${JSON.stringify(user)}`);
+      continue;
+    }
+    updated_at.set(user.id, user.content.data.updated_at);
   }
 
   while (true) {
@@ -59,8 +66,12 @@ function fetchAllStargazers(db: DB, org: string, repo: string, token: string) {
     if (stargazers.length === 0) break;
 
     for (const stargazer of stargazers) {
+      if (!stargazer)  {
+        log(`stargazer is null: ${JSON.stringify(stargazer)}`);
+        continue;
+      }
       // if we have already checked this user, and they haven't updated since, skip
-      if (updated_at.has(stargazer.id) && updated_at.get(stargazer.id) === stargazer.updated_at) {
+      if (updated_at.has(stargazer.id) && updated_at.get(stargazer.id) === stargazer?.updated_at) {
         continue;
       }
 
@@ -180,7 +191,7 @@ export function main() {
 
   let schema = loadOrCreateSchema(githubUsersSchema);
   let hash = (typeof schema.content === 'string') ? schema.content : schema.content.hash;
-  log(`Schema loaded: ${schema.title} ${hash}`);
+  log(`Schema loaded. title: ${schema.title} hash: ${hash}`);
   log(JSON.stringify(schema));
 
   // build a db shim

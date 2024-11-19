@@ -13,7 +13,9 @@ use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use super::events::{Event, EventKind, EventObject, HashLink, Tag, EVENT_SQL_FIELDS, NOSTR_ID_TAG};
+use super::events::{
+    Event, EventKind, EventObject, HashLink, Tag, EVENT_SQL_READ_FIELDS, NOSTR_ID_TAG,
+};
 use super::tickets::ProgramTicket;
 use super::Space;
 use crate::router::RouterClient;
@@ -161,7 +163,7 @@ impl Programs {
             author: PublicKey::from_bytes(author.public_key().as_bytes())?,
             created_at: chrono::Utc::now().timestamp(),
             manifest,
-            content: HashLink { hash, value: None },
+            content: HashLink { hash, data: None },
             html_index,
             program_entry,
         };
@@ -253,8 +255,10 @@ impl Programs {
         println!("getting program: {:?}", id);
         let mut stmt = conn
             .prepare(
-                format!("SELECT {EVENT_SQL_FIELDS} FROM events WHERE kind = ?1 AND data_id = ?2")
-                    .as_str(),
+                format!(
+                    "SELECT {EVENT_SQL_READ_FIELDS} FROM events WHERE kind = ?1 AND data_id = ?2"
+                )
+                .as_str(),
             )
             .context("selecting Program by id from events table")?;
         let mut rows = stmt.query(params![EventKind::MutateProgram, id])?;
@@ -280,8 +284,10 @@ impl Programs {
         let conn = self.0.db.lock().await;
         let mut stmt = conn
             .prepare(
-                format!("SELECT {EVENT_SQL_FIELDS} FROM events WHERE kind = ?1 LIMIT ?2 OFFSET ?3")
-                    .as_str(),
+                format!(
+                    "SELECT {EVENT_SQL_READ_FIELDS} FROM events WHERE kind = ?1 LIMIT ?2 OFFSET ?3"
+                )
+                .as_str(),
             )
             .context("selecting Programs from events table")?;
         let mut rows = stmt.query(params![EventKind::MutateProgram, limit, offset])?;

@@ -13,11 +13,7 @@ export function sleep(milliseconds: number) {
 export interface Schema {
   title: string;
   hash: string;
-  content: string | {
-    hash: string;
-    value?: any;
-  };
-  data: any;
+  content: string | HashLink;
 }
 
 export function loadOrCreateSchema(schema: any): Schema {
@@ -27,7 +23,7 @@ export function loadOrCreateSchema(schema: any): Schema {
   return Memory.find(offset).readJsonObject();
 }
 
-export function query(schema: Schema, query: string): Entry[] {
+export function query(schema: Schema, query: string): Row[] {
   let hash = (typeof schema.content === 'string') ? schema.content : schema.content.hash;
   const s = Memory.fromString(hash);
   const q = Memory.fromString(query);
@@ -37,13 +33,18 @@ export function query(schema: Schema, query: string): Entry[] {
   return Memory.find(offset).readJsonObject();
 }
 
-export interface Entry {
-  id: string;
-  schema: string;
-  data: any;
+export interface HashLink {
+  hash: string;
+  data?: any;
 }
 
-export function addEntry(schema: Schema, entry: any): Entry {
+export interface Row {
+  id: string;
+  schema: string;
+  content: HashLink | string;
+}
+
+export function addEntry(schema: Schema, entry: any): Row {
   let hash = (typeof schema.content === 'string') ? schema.content : schema.content.hash;
   const s = Memory.fromString(hash);
   const d = Memory.fromJsonObject(entry);
@@ -53,7 +54,7 @@ export function addEntry(schema: Schema, entry: any): Entry {
   return Memory.find(offset).readJsonObject();
 }
 
-export function updateEntry(schema: Schema, id: string, entry: any): Entry {
+export function updateEntry(schema: Schema, id: string, entry: any): Row {
   let hash = (typeof schema.content === 'string') ? schema.content : schema.content.hash;
   const s = Memory.fromString(hash);
   const i = Memory.fromString(id);

@@ -10,7 +10,9 @@ use uuid::Uuid;
 use crate::router::RouterClient;
 use crate::space::events::Tag;
 
-use super::events::{Event, EventKind, EventObject, HashLink, NOSTR_ID_TAG, NOSTR_SCHEMA_TAG};
+use super::events::{
+    Event, EventKind, EventObject, HashLink, EVENT_SQL_READ_FIELDS, NOSTR_ID_TAG, NOSTR_SCHEMA_TAG,
+};
 use super::Space;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -34,14 +36,14 @@ impl EventObject for Row {
         let id = event.data_id()?.ok_or_else(|| anyhow!("missing data id"))?;
 
         // fetch content if necessary
-        let content = match event.content.value {
+        let content = match event.content.data {
             Some(_) => event.content,
             None => {
                 let content = client.blobs().read_to_bytes(event.content.hash).await?;
                 let content = serde_json::from_slice::<Value>(&content).map_err(|e| anyhow!(e))?;
                 HashLink {
                     hash: event.content.hash,
-                    value: Some(content),
+                    data: Some(content),
                 }
             }
         };
@@ -120,7 +122,7 @@ impl Rows {
         limit: i64,
     ) -> Result<Vec<Row>> {
         let conn = self.0.db.lock().await;
-        let mut stmt = conn.prepare("SELECT id, pubkey, created_at, kind, schema, data_id, content, sig FROM events WHERE schema = ?1 LIMIT ?2 OFFSET ?3")?;
+        let mut stmt = conn.prepare(format!("SELECT {EVENT_SQL_READ_FIELDS} FROM events WHERE schema_hash = ?1 LIMIT ?2 OFFSET ?3").as_str())?;
         let mut rows = stmt.query(params![schema.to_string(), limit, offset])?;
         let mut events = Vec::new();
 

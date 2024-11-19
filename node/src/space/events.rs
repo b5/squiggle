@@ -2,6 +2,7 @@ use std::fmt::Write;
 
 use anyhow::{anyhow, Context, Result};
 use ed25519_dalek::Signature;
+use extism::ToBytes;
 use iroh::blobs::Hash;
 use iroh::docs::Author;
 use iroh::net::key::PublicKey;
@@ -23,8 +24,10 @@ const NOSTR_EVENT_VERSION_NUMBER: u32 = 0;
 pub(crate) const NOSTR_SCHEMA_TAG: &str = "sch";
 pub(crate) const NOSTR_ID_TAG: &str = "id";
 
-pub(crate) const EVENT_SQL_FIELDS: &str =
-    "id, pubkey, created_at, kind, schema, data_id, content, sig";
+pub(crate) const EVENT_SQL_READ_FIELDS: &str =
+    "id, pubkey, created_at, kind, schema_hash, data_id, content_hash, content";
+const EVENT_SQL_WRITE_FIELDS: &str =
+    "id, pubkey, created_at, kind, schema_hash, data_id, content_hash, content, sig";
 
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub enum EventKind {
@@ -201,12 +204,12 @@ impl FromStr for Sha256Digest {
 #[derive(Debug, Clone)]
 pub struct HashLink {
     pub hash: Hash,
-    pub value: Option<Value>,
+    pub data: Option<Value>,
 }
 
 impl From<Hash> for HashLink {
     fn from(hash: Hash) -> Self {
-        HashLink { hash, value: None }
+        HashLink { hash, data: None }
     }
 }
 
@@ -215,7 +218,7 @@ impl Serialize for HashLink {
     where
         S: Serializer,
     {
-        match &self.value {
+        match &self.data {
             Some(value) => {
                 let mut state = serializer.serialize_struct("HashLink", 2)?;
                 state.serialize_field("hash", &self.hash.to_string())?;
@@ -263,7 +266,7 @@ impl<'de> Deserialize<'de> for HashLink {
                     HashLinkStruct::deserialize(serde::de::value::MapAccessDeserializer::new(map))?;
                 Ok(HashLink {
                     hash: hash_link_struct.hash,
-                    value: hash_link_struct.value,
+                    data: hash_link_struct.value,
                 })
             }
         }
@@ -274,12 +277,12 @@ impl<'de> Deserialize<'de> for HashLink {
 
 impl HashLink {
     pub async fn resolve(&mut self, router: &RouterClient) -> Result<Value> {
-        match self.value {
+        match self.data {
             Some(ref v) => Ok(v.clone()),
             None => {
                 let data = router.blobs().read_to_bytes(self.hash).await?;
                 let value: Value = serde_json::from_slice(&data)?;
-                self.value = Some(value.clone());
+                self.data = Some(value.clone());
                 Ok(value)
             }
         }
@@ -316,7 +319,7 @@ pub(crate) struct Event {
     pub created_at: i64,
     pub kind: EventKind,
     pub tags: Vec<Tag>,
-    pub sig: Signature,
+    pub sig: Option<Signature>,
     pub content: HashLink,
 }
 
@@ -339,7 +342,7 @@ impl Event {
             created_at,
             kind,
             tags,
-            sig,
+            sig: Some(sig),
             content,
         })
     }
@@ -349,8 +352,10 @@ impl Event {
     pub(crate) async fn read_raw(db: &DB, id: Uuid) -> Result<Self> {
         let conn = db.lock().await;
         let mut stmt = conn.prepare(
-            format!("SELECT {EVENT_SQL_FIELDS} FROM events WHERE id = ?1 ORDER BY CREATED DESC")
-                .as_str(),
+            format!(
+                "SELECT {EVENT_SQL_READ_FIELDS} FROM events WHERE id = ?1 ORDER BY CREATED DESC"
+            )
+            .as_str(),
         )?;
         // TODO(b5) - use query_row with mapping func
         let mut rows = stmt.query(params![id])?;
@@ -425,11 +430,16 @@ impl Event {
     pub(crate) async fn write(&self, db: &DB) -> Result<()> {
         let schema = self.schema()?.map(|s| s.to_string());
         let data_id = self.data_id()?;
+        let sig = self.sig.map_or(None, |sig| Some(sig.to_bytes()));
+        let value = match self.content.data {
+            Some(ref v) => Some(v.to_bytes()?),
+            None => None,
+        };
 
         let conn = db.lock().await;
         conn.execute(
             format!(
-                "INSERT INTO events ({EVENT_SQL_FIELDS}) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)"
+                "INSERT INTO events ({EVENT_SQL_WRITE_FIELDS}) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)"
             )
             .as_str(),
             params![
@@ -440,26 +450,29 @@ impl Event {
                 schema,
                 data_id,
                 self.content.hash.to_string(),
-                self.sig.to_bytes(),
+                value,
+                sig,
             ],
         )
         .context("inserting event")?;
         Ok(())
     }
 
+    /// this skips reading the signature. We only need signatures for data transfer
     pub(crate) fn from_sql_row(row: &rusqlite::Row) -> Result<Self> {
-        // (0   1       2           3     4       5        6       7)
-        // (id, pubkey, created_at, kind, schema, data_id, content, sig)
         let id: String = row.get(0)?;
         let pubkey: String = row.get(1)?;
         let pubkey = PublicKey::from_str(&pubkey)?;
-        let content: String = row.get(6)?;
+        let content_hash: String = row.get(6)?;
         let data_id: Uuid = row.get(5)?;
-        let sig_data: Vec<u8> = row.get(7)?;
-        let sig_data: [u8; 64] = sig_data
-            .try_into()
-            .map_err(|_| anyhow!("invalid signature data"))?;
-        let sig = Signature::from_bytes(&sig_data);
+
+        let hash = Hash::from_str(&content_hash).map_err(|e| anyhow!(e))?;
+        let value: Option<Vec<u8>> = row.get(7)?;
+        let value = match value {
+            Some(v) => Some(serde_json::from_slice(&v)?),
+            None => None,
+        };
+        let content = HashLink { hash, data: value };
 
         let mut tags: Vec<Tag> = Vec::new();
         let schema: Option<String> = row.get(4)?;
@@ -474,8 +487,8 @@ impl Event {
             created_at: row.get(2)?,
             kind: row.get(3)?,
             tags,
-            content: Hash::from_str(&content)?.into(),
-            sig,
+            content,
+            sig: None,
         })
     }
 }

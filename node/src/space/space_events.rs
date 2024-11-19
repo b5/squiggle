@@ -35,7 +35,7 @@ impl EventObject for SpaceEvent {
 
         // fetch content if necessary
         // TODO(b5): I know the double serializing is terrible
-        let (content, _title) = match event.content.value {
+        let (content, _title) = match event.content.data {
             None => {
                 let content = client.blobs().read_to_bytes(event.content.hash).await?;
                 let meta =
@@ -44,7 +44,7 @@ impl EventObject for SpaceEvent {
                 (
                     HashLink {
                         hash: event.content.hash,
-                        value: Some(content),
+                        data: Some(content),
                     },
                     meta.title,
                 )
@@ -122,7 +122,7 @@ impl SpaceEvents {
             author: PublicKey::from_bytes(author.public_key().as_bytes())?,
             content: HashLink {
                 hash: res.hash,
-                value: Some(v),
+                data: Some(v),
             },
         };
 

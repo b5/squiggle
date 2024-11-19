@@ -18,7 +18,7 @@ use super::Executor;
 
 #[derive(Debug, Clone)]
 pub struct Docker {
-    spaces: Spaces,
+    // spaces: Spaces,
     router: RouterClient,
     docker: bollard::Docker,
     blobs: Blobs,
@@ -28,7 +28,7 @@ pub struct Docker {
 
 impl Docker {
     pub async fn new(
-        spaces: Spaces,
+        _spaces: Spaces,
         router: RouterClient,
         blobs: Blobs,
         root: PathBuf,
@@ -38,7 +38,7 @@ impl Docker {
         let root = root.canonicalize()?;
 
         Ok(Self {
-            spaces,
+            // spaces,
             router,
             docker,
             blobs,

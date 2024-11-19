@@ -47,11 +47,7 @@ async fn main() -> Result<()> {
     let file = tokio::fs::read("../programs/github_repo_stargazers/dist/program.json").await?;
     let manifest: Manifest = serde_json::from_slice(file.as_slice())?;
 
-    let program = match space
-        .programs()
-        .get_by_name(node.router(), manifest.name)
-        .await
-    {
+    let program = match space.programs().get_by_name(manifest.name).await {
         Ok(program) => program,
         Err(_) => {
             space

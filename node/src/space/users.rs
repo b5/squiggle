@@ -105,7 +105,7 @@ impl User {
             created_at: chrono::Utc::now().timestamp(),
             content: HashLink {
                 hash: result.hash,
-                value: None,
+                data: None,
             },
             profile: Some(profile),
             blankame: get_blankname(pubkey),

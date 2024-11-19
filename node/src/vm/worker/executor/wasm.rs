@@ -82,7 +82,6 @@ impl Executor for WasmExecutor {
 
         let wasm_context = UserData::new(WasmContext {
             author: ctx.author.clone(),
-            router: self.router.clone(),
             rt: tokio::runtime::Handle::current(),
             space: space.clone(),
             output: String::new(),
@@ -143,7 +142,6 @@ struct WasmContext {
     rt: tokio::runtime::Handle,
     author: Author,
     space: Space,
-    router: RouterClient,
     output: String,
 }
 
@@ -165,7 +163,6 @@ host_fn!(sleep(ctx: WasmContext; ms: u64) -> () {
 host_fn!(schema_load_or_create(ctx: WasmContext; data: String) -> Vec<u8> {
     let ctx = ctx.get()?;
     let ctx = ctx.lock().unwrap();
-    let router = &ctx.router;
     let schemas = ctx.space.schemas();
     let author = ctx.author.clone();
 
@@ -184,7 +181,6 @@ host_fn!(event_create(ctx: WasmContext; schema: String, data: String) -> Vec<u8>
     let author = ctx.author.clone();
     let space = ctx.space.clone();
     let parsed = serde_json::from_str::<serde_json::Value>(&data).context("parsing JSON")?;
-    let router = &ctx.router;
 
     tokio::task::block_in_place(|| {
         ctx.rt.block_on(async move {
@@ -204,7 +200,6 @@ host_fn!(event_mutate(ctx: WasmContext; schema: String, id: String, data: String
     let id = Uuid::parse_str(id.clone().as_str()).map_err(|_| anyhow!("invalid id"))?;
     let author = ctx.author.clone();
     let rows = ctx.space.rows();
-    let router = &ctx.router;
 
     tokio::task::block_in_place(|| {
         ctx.rt.block_on(async move {
@@ -222,7 +217,6 @@ host_fn!(event_query(ctx: WasmContext; schema: String, query: String) -> Vec<u8>
 
     let schema = Hash::from_str(schema.as_str()).map_err(|_| anyhow!("invalid schema hash"))?;
     let rows = ctx.space.rows().clone();
-    let router = &ctx.router;
 
     tokio::task::block_in_place(|| {
         ctx.rt.block_on(async move {

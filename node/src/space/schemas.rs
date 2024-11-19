@@ -8,7 +8,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
 
-use super::events::{Event, EventKind, EventObject, HashLink, Tag, EVENT_SQL_FIELDS, NOSTR_ID_TAG};
+use super::events::{
+    Event, EventKind, EventObject, HashLink, Tag, EVENT_SQL_READ_FIELDS, NOSTR_ID_TAG,
+};
 use super::rows::Row;
 use super::Space;
 use crate::router::RouterClient;
@@ -39,7 +41,7 @@ impl EventObject for Schema {
 
         // fetch content if necessary
         // TODO(b5): I know the double serializing is terrible
-        let (content, title) = match event.content.value {
+        let (content, title) = match event.content.data {
             None => {
                 let content = client.blobs().read_to_bytes(event.content.hash).await?;
                 let meta =
@@ -48,7 +50,7 @@ impl EventObject for Schema {
                 (
                     HashLink {
                         hash: event.content.hash,
-                        value: Some(content),
+                        data: Some(content),
                     },
                     meta.title,
                 )
@@ -136,8 +138,8 @@ impl Schema {
         };
 
         // add to iroh
-        let data = serde_json::to_vec(&data)?;
-        let outcome = router.blobs().add_bytes(data).await?;
+        let data2 = serde_json::to_vec(&data)?;
+        let outcome = router.blobs().add_bytes(data2).await?;
         let created_at = chrono::Utc::now().timestamp();
         let hash = outcome.hash;
 
@@ -148,7 +150,10 @@ impl Schema {
             id,
             schema: self.content.hash,
             created_at,
-            content: HashLink { hash, value: None },
+            content: HashLink {
+                hash,
+                data: Some(data),
+            },
         };
 
         // write event
@@ -210,7 +215,7 @@ impl Schemas {
             author: PublicKey::from_bytes(author.public_key().as_bytes())?,
             content: HashLink {
                 hash: res.hash,
-                value: None,
+                data: None,
             },
         };
 
@@ -234,8 +239,10 @@ impl Schemas {
         let conn = self.0.db.lock().await;
         let mut stmt = conn
             .prepare(
-                format!("SELECT {EVENT_SQL_FIELDS} FROM events WHERE kind = ?1 AND content = ?2")
-                    .as_str(),
+                format!(
+                    "SELECT {EVENT_SQL_READ_FIELDS} FROM events WHERE kind = ?1 AND content_hash = ?2"
+                )
+                .as_str(),
             )
             .context("selecting schemas from events table")?;
 
@@ -251,8 +258,10 @@ impl Schemas {
         let conn = self.0.db.lock().await;
         let mut stmt = conn
             .prepare(
-                format!("SELECT {EVENT_SQL_FIELDS} FROM events WHERE kind = ?1 LIMIT ?2 OFFSET ?3")
-                    .as_str(),
+                format!(
+                    "SELECT {EVENT_SQL_READ_FIELDS} FROM events WHERE kind = ?1 LIMIT ?2 OFFSET ?3"
+                )
+                .as_str(),
             )
             .context("selecting schemas from events table")?;
         let mut rows = stmt.query(rusqlite::params![EventKind::MutateSchema, limit, offset])?;

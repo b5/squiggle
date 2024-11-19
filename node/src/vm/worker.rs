@@ -43,7 +43,6 @@ pub struct Worker {
     executors: Executors,
     doc: Doc,
     blobs: Blobs,
-    spaces: Spaces,
     router: RouterClient,
     current_jobs: Arc<Mutex<HashSet<Uuid>>>,
     /// If this worker will accept work.
@@ -61,7 +60,6 @@ impl Worker {
     ) -> Result<Self> {
         let executors = Executors::new(spaces.clone(), router.clone(), blobs.clone(), root).await?;
         let w = Self {
-            spaces,
             router,
             author_id,
             executors,

@@ -16,14 +16,15 @@ pub(crate) async fn setup_db(db: &DB) -> Result<()> {
     let conn = db.lock().await;
     conn.execute(
         "CREATE TABLE IF NOT EXISTS events (
-            id         BLOB PRIMARY KEY,
-            pubkey     TEXT NOT NULL,
-            created_at INTEGER NOT NULL,
-            kind       INTEGER NOT NULL,
-            schema     TEXT,
-            data_id    TEXT NOT NULL,
-            content    TEXT NOT NULL,
-            sig        BLOB NOT NULL
+            id           BLOB PRIMARY KEY,
+            pubkey       TEXT NOT NULL,
+            created_at   INTEGER NOT NULL,
+            kind         INTEGER NOT NULL,
+            schema_hash  TEXT,
+            data_id      BLOB NOT NULL,
+            sig          BLOB NOT NULL,
+            content_hash TEXT NOT NULL,
+            content      BLOB
         )",
         [],
     )?;
