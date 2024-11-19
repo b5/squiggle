@@ -160,6 +160,10 @@ impl Spaces {
         Ok(())
     }
 
+    pub async fn list(&self, _offset: i64, _limit: i64) -> Result<Vec<SpaceDetails>> {
+        Self::read_from_file(self.path.join(SPACES_FILENAME)).await
+    }
+
     // async fn write_all(
     //     base_path: impl Into<PathBuf>,
     //     spaces: HashMap<String, Space>,

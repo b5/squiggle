@@ -1,3 +1,5 @@
+use std::fmt::Write;
+
 use anyhow::{anyhow, Context, Result};
 use ed25519_dalek::Signature;
 use iroh::blobs::Hash;
@@ -143,7 +145,10 @@ impl Sha256Digest {
 
 /// Helper function to convert a byte array to a lowercase hex string
 fn to_hex_string(bytes: &[u8]) -> String {
-    bytes.iter().map(|byte| format!("{:02x}", byte)).collect()
+    bytes.iter().fold(String::new(), |mut output, b| {
+        let _ = write!(output, "{b:02x}");
+        output
+    })
 }
 
 /// Helper function to parse a hex string into a byte array

@@ -29,7 +29,7 @@ mod config;
 pub mod content_routing;
 mod doc;
 mod docker;
-mod flow;
+pub mod flow;
 mod job;
 mod metrics;
 mod scheduler;
