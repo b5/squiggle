@@ -1,0 +1,5 @@
+{
+  "name": "github_repo_stargazers",
+  "version": "0.0.1",
+  "description": "A program to get the stargazers of a GitHub repository"
+}

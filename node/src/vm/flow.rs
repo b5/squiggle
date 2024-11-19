@@ -13,13 +13,11 @@ use tokio::task::JoinSet;
 use tracing::{debug, info, instrument, warn};
 use uuid::Uuid;
 
-use crate::router::RouterClient;
-
 use super::blobs::Blobs;
 use super::job::{JobDescription, JobNameContext, JobResult, JobResultStatus};
 use super::metrics::Metrics;
 use super::scheduler::Scheduler;
-use super::workspace::Workspace;
+use super::VM;
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Flow {
@@ -83,9 +81,10 @@ impl Flow {
     }
 
     #[instrument(skip_all, fields(flow_name = %self.name))]
-    pub async fn run(self, node: &RouterClient, workspace: &Workspace) -> Result<FlowOutput> {
+    pub async fn run(self, vm: &VM) -> Result<FlowOutput> {
         iroh_metrics::inc!(Metrics, flow_run_started);
         let scope = Uuid::new_v4();
+        let router = vm.router.clone();
 
         // Upload inputs
         for upload in &self.uploads {
@@ -101,31 +100,25 @@ impl Flow {
 
                     let file = tokio::fs::File::open(file_path).await?;
                     let file = BufReader::new(file);
-                    node.blobs()
+                    router
+                        .blobs()
                         .add_reader(file, SetTagOption::Auto)
                         .await?
                         .await?
                 }
-                UploadSource::Inline { content } => node.blobs().add_bytes(content.clone()).await?,
+                UploadSource::Inline { content } => {
+                    router.blobs().add_bytes(content.clone()).await?
+                }
             };
             let name = format!("{}/{}", scope.as_simple(), upload.name);
-            workspace
-                .blobs()
-                .put_object(&name, res.hash, res.size)
-                .await?;
+            vm.blobs().put_object(&name, res.hash, res.size).await?;
         }
 
         let mut out = Vec::new();
         for task in self.tasks.into_iter() {
             let job_id = Uuid::new_v4();
             let i = task
-                .run(
-                    scope,
-                    node,
-                    workspace.scheduler().clone(),
-                    workspace.blobs().clone(),
-                    job_id,
-                )
+                .run(scope, vm.scheduler().clone(), vm.blobs().clone(), job_id)
                 .await;
             out.extend(i);
         }
@@ -139,7 +132,7 @@ impl Flow {
             let path = PathBuf::from(&download.path);
             let name = ctx.render(&download.name)?;
             debug!("downloading {} to {}", name, path.display());
-            let data = workspace.blobs().get_object(&name).await?;
+            let data = vm.blobs().get_object(&name).await?;
             if let Some(parent) = path.parent() {
                 tokio::fs::create_dir_all(parent).await?;
             }
@@ -190,7 +183,7 @@ impl FlowOutput {
     /// Get a generated artifact.
     pub async fn get_artifact(
         &self,
-        ws: &Workspace,
+        ws: &VM,
         job_name: &str,
         artifact_name: &str,
     ) -> Result<Bytes> {
@@ -220,8 +213,8 @@ impl std::str::FromStr for Flow {
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Task {
     #[serde(default)]
-    tasks: Vec<Task>,
-    description: JobDescription,
+    pub(crate) tasks: Vec<Task>,
+    pub description: JobDescription,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
@@ -237,7 +230,6 @@ impl Task {
     pub fn run(
         self,
         scope: Uuid,
-        node: &RouterClient,
         scheduler: Scheduler,
         blobs: Blobs,
         job_id: Uuid,
@@ -248,12 +240,11 @@ impl Task {
         iroh_metrics::inc!(Metrics, task_run_started);
 
         for task in self.tasks.into_iter() {
-            let n2 = node.clone();
             let s2 = scheduler.clone();
             let b2 = blobs.clone();
             let job_id = Uuid::new_v4();
             let job_name = task.description.name.clone();
-            let handle = set.spawn(async move { task.run(scope, &n2, s2, b2, job_id).await });
+            let handle = set.spawn(async move { task.run(scope, s2, b2, job_id).await });
             meta.insert(handle.id(), (job_name, job_id));
         }
 
@@ -419,8 +410,9 @@ mod tests {
             tasks: vec![Task {
                 description: JobDescription {
                     name: "job".into(),
+                    environment: Default::default(),
                     details: JobDetails::Wasm {
-                        module: "foo.wasm".into(),
+                        module: Source::LocalPath("foo.wasm".into()),
                     },
                     artifacts: Default::default(),
                     timeout: DEFAULT_TIMEOUT,
@@ -428,6 +420,7 @@ mod tests {
                 tasks: vec![Task {
                     description: JobDescription {
                         name: "job-nested".into(),
+                        environment: Default::default(),
                         details: JobDetails::Docker {
                             image: "docker-image".into(),
                             command: vec!["ls".into()],
@@ -702,8 +695,7 @@ mod tests {
         assert_eq!(
             task.result.status,
             JobResultStatus::Ok(JobOutput::Wasm {
-                stdout: "hello world\n".into(),
-                stderr: Default::default(),
+                output: "hello world\n".into(),
             })
         );
 

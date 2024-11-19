@@ -1,0 +1,20 @@
+name = "github_repo_stargazers"
+
+[[uploads]]
+name = "github_repo_stargazers.wasm"
+[uploads.source.file]
+path = "../programs/github_repo_stargazers/dist/plugin.wasm"
+
+[[tasks]]
+
+[tasks.description]
+name = "run"
+author = "ctdsv6inb4vkfeuoqvd5g377yjbtbeqwwcprbm4xqmbuddczgszq"
+environment = { "org" = "n0-computer", "repo" = "awesome-iroh", "github_token" = "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" }
+
+[[tasks.description.artifacts.downloads]]
+path = "github_repo_stargazers.wasm"
+name = "{scope}/github_repo_stargazers.wasm"
+
+[tasks.description.details.wasm]
+module = "github_repo_stargazers.wasm"

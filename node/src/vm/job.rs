@@ -1,14 +1,12 @@
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeSet, HashMap},
     path::{Path, PathBuf},
 };
 
 use anyhow::{bail, Context, Result};
 use bytes::Bytes;
-use iroh::{
-    blobs::{util::SetTagOption, Hash},
-    docs::AuthorId,
-};
+use iroh::blobs::{util::SetTagOption, Hash};
+use iroh::docs::{Author, AuthorId};
 use serde::{Deserialize, Serialize};
 use tinytemplate::TinyTemplate;
 use tokio::io::AsyncWriteExt;
@@ -90,6 +88,12 @@ impl JobStatus {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
+pub enum Source {
+    LocalPath(String),
+    LocalBlob(iroh::blobs::Hash),
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
 pub enum JobDetails {
     /// Run a job inside of a docker container.
     #[serde(rename = "docker")]
@@ -103,7 +107,7 @@ pub enum JobDetails {
     Wasm {
         /// Path to the compiled `.wasm` module.
         /// Expects to be a wasi module
-        module: String,
+        module: Source,
     },
 }
 
@@ -124,8 +128,16 @@ pub enum JobType {
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct JobDescription {
+    /// name of the space to run the job in
+    /// TODO - this should be the space id
+    pub space: String,
     /// Human-readable name of the job
     pub name: String,
+    /// the identifier of the user to run the job as.
+    /// Must have private half of key stored locally
+    pub author: String,
+    // configuration to pass to execution environment
+    pub environment: HashMap<String, String>,
     /// Job details.
     pub details: JobDetails,
     #[serde(default)]
@@ -252,6 +264,7 @@ impl TryFrom<Bytes> for JobDescription {
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct ScheduledJob {
+    pub author: AuthorId,
     pub description: JobDescription,
     pub scope: Uuid,
     pub result: JobResult,
@@ -306,12 +319,15 @@ pub enum JobOutput {
 
 #[derive(Debug)]
 pub struct JobContext {
+    // space to run the job within
+    pub space: String,
     /// Job id
     pub id: Uuid,
+    pub environment: HashMap<String, String>,
     /// Job name
     pub name: String,
     pub name_context: JobNameContext,
-    pub worker: AuthorId,
+    pub author: Author,
     pub artifacts: Artifacts,
 }
 
@@ -335,7 +351,7 @@ impl JobContext {
             "{}-{}-{}-{}",
             self.name_context.scope.as_simple(),
             self.name,
-            self.worker,
+            self.author,
             ctx,
         )
     }
@@ -473,8 +489,11 @@ mod tests {
 
     #[test]
     fn test_job_dependencies() {
+        let author_id = Author::new(&mut thread_rng()).id();
         let job = JobDescription {
+            author: author_id,
             name: "foo".into(),
+            environment: Default::default(),
             details: JobDetails::Docker {
                 image: "alpine:latest".into(),
                 command: vec!["ls".into()],

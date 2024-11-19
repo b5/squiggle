@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use anyhow::{bail, Context, Result};
 use bytes::Bytes;
 use futures::StreamExt;
@@ -16,8 +18,8 @@ use super::job::{
     JobDescription, JobResult, JobResultStatus, JobStatus, ScheduledJob, JOBS_PREFIX,
 };
 use super::metrics::Metrics;
+use super::node_author_id;
 use super::worker::{ExecutionStatus, WorkerEvent};
-use super::workspace::node_author_id;
 
 #[derive(Clone, Debug)]
 pub struct Scheduler {
@@ -59,11 +61,14 @@ impl Scheduler {
         job_description: JobDescription,
     ) -> Result<Uuid> {
         info!(
-            "scheduling job: {} ({}) with scope {}",
-            job_description.name, id, scope
+            "scheduling job: {} ({}) with scope {} by {}",
+            job_description.name, id, scope, job_description.author
         );
 
+        let author = AuthorId::from_str(&job_description.author.as_str())?;
+
         let scheduled_job = ScheduledJob {
+            author,
             description: job_description,
             scope,
             result: JobResult::default(),
@@ -595,8 +600,7 @@ mod tests {
         assert_eq!(
             job_result.status,
             JobResultStatus::Ok(JobOutput::Wasm {
-                stdout: "hello world\n".into(),
-                stderr: Default::default(),
+                output: "hello world\n".into(),
             })
         );
 

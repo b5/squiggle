@@ -1,9 +1,6 @@
 //! Metrics for fog
-use std::net::SocketAddr;
-
 use iroh_metrics::core::{Counter, Metric};
 use iroh_metrics::struct_iterable::Iterable;
-use tracing::{debug, info};
 
 /// Enum of metrics for the module
 #[allow(missing_docs)]
@@ -59,33 +56,33 @@ impl Default for Metrics {
 
 impl Metric for Metrics {
     fn name() -> &'static str {
-        "fog"
+        "datalayer"
     }
 }
 
-pub fn try_init_metrics_collection() -> std::io::Result<()> {
-    iroh_metrics::core::Core::try_init(|reg, metrics| {
-        metrics.insert(crate::vm::metrics::Metrics::new(reg));
-        metrics.insert(iroh::docs::metrics::Metrics::new(reg));
-        metrics.insert(iroh::net::metrics::MagicsockMetrics::new(reg));
-        metrics.insert(iroh::net::metrics::NetcheckMetrics::new(reg));
-        metrics.insert(iroh::net::metrics::PortmapMetrics::new(reg));
-    })
-}
+// pub fn try_init_metrics_collection() -> std::io::Result<()> {
+//     iroh_metrics::core::Core::try_init(|reg, metrics| {
+//         metrics.insert(crate::vm::metrics::Metrics::new(reg));
+//         metrics.insert(iroh::docs::metrics::Metrics::new(reg));
+//         metrics.insert(iroh::net::metrics::MagicsockMetrics::new(reg));
+//         metrics.insert(iroh::net::metrics::NetcheckMetrics::new(reg));
+//         metrics.insert(iroh::net::metrics::PortmapMetrics::new(reg));
+//     })
+// }
 
-pub fn start_metrics_server(metrics_port: Option<u16>) -> Option<tokio::task::JoinHandle<()>> {
-    // doesn't start the server if the address is None
-    if let Some(metrics_port) = metrics_port {
-        let metrics_addr = SocketAddr::from(([0, 0, 0, 0], metrics_port));
-        // metrics are initilaized with try_init_metrics_collection
-        // here we only start the server
-        info!("Starting metrics server at {}", metrics_addr);
-        return Some(tokio::task::spawn(async move {
-            if let Err(e) = iroh_metrics::metrics::start_metrics_server(metrics_addr).await {
-                eprintln!("Failed to start metrics server: {e}");
-            }
-        }));
-    }
-    debug!("Metrics server not started, no address provided");
-    None
-}
+// pub fn start_metrics_server(metrics_port: Option<u16>) -> Option<tokio::task::JoinHandle<()>> {
+//     // doesn't start the server if the address is None
+//     if let Some(metrics_port) = metrics_port {
+//         let metrics_addr = SocketAddr::from(([0, 0, 0, 0], metrics_port));
+//         // metrics are initilaized with try_init_metrics_collection
+//         // here we only start the server
+//         info!("Starting metrics server at {}", metrics_addr);
+//         return Some(tokio::task::spawn(async move {
+//             if let Err(e) = iroh_metrics::metrics::start_metrics_server(metrics_addr).await {
+//                 eprintln!("Failed to start metrics server: {e}");
+//             }
+//         }));
+//     }
+//     debug!("Metrics server not started, no address provided");
+//     None
+// }

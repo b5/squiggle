@@ -1,49 +1,132 @@
+use std::collections::HashMap;
+use std::str::FromStr;
 use std::sync::Arc;
 
 use datalayer_node::node::Node;
-use datalayer_node::repo::users::User;
-use datalayer_node::vm::flow::{Flow, FlowOutput};
-
-#[tauri::command]
-async fn run_flow(node: tauri::State<'_, Arc<Node>>, path: &str) -> Result<FlowOutput, String> {
-    println!("Current working directory: {:?} running flow: {:?}", std::env::current_dir().unwrap(), path);
-    let flow = Flow::load(path).await.map_err(|e| e.to_string())?;
-    let output = node
-        .vm()
-        .run("default", flow)
-        .await
-        .map_err(|e| e.to_string())?;
-  Ok(output)
-}
-
-#[tauri::command]
-async fn list_users(
-    node: tauri::State<'_, Arc<Node>>,
-) -> Result<Vec<User>, String> {
-    let users = node.repo().users().list().await.map_err(|e| e.to_string())?;
-    Ok(users)
-}
-
-// Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-#[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
-}
+use datalayer_node::space::programs::Program;
+use datalayer_node::space::rows::Row;
+use datalayer_node::space::schemas::Schema;
+use datalayer_node::space::users::User;
+use datalayer_node::space::SpaceDetails;
+use datalayer_node::vm::flow::TaskOutput;
+use datalayer_node::Hash;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let node = tauri::async_runtime::block_on(async move {
-        let path = std::path::PathBuf::from("../test");
+        let path = datalayer_node::node::data_root().unwrap();
         let node = datalayer_node::node::Node::open(path)
             .await
             .expect("failed to build datalayer");
+        // TODO - capture & cleanup task handle
+        node.gateway("127.0.0.1:8080")
+            .await
+            .expect("failed to start gateway");
         node
     });
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .manage(Arc::new(node))
-        .invoke_handler(tauri::generate_handler![greet, list_users, run_flow])
+        .invoke_handler(tauri::generate_handler![spaces_list, users_list, programs_list, program_run, schemas_list, schemas_get, rows_query])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[tauri::command]
+async fn users_list(
+    node: tauri::State<'_, Arc<Node>>,
+    space: &str,
+    offset: i64,
+    limit: i64,
+) -> Result<Vec<User>, String> {
+    let spaces = node.spaces().clone();
+    let router = node.router().clone();
+    tokio::task::block_in_place(|| {
+        tauri::async_runtime::block_on(async move {
+            let space = spaces.get(space).await.ok_or("space not found")?;
+            space.users().list(&router, offset, limit).await.map_err(|e| e.to_string())
+        })
+    })      
+}
+
+#[tauri::command]
+async fn spaces_list(
+    node: tauri::State<'_, Arc<Node>>,
+    offset: i64,
+    limit: i64,
+) -> Result<Vec<SpaceDetails>, String> {
+    let node = node.clone();
+    tokio::task::block_in_place(|| {
+        tauri::async_runtime::block_on(async move {
+            node.spaces().list(offset, limit).await.map_err(|e| e.to_string())
+        })
+    })      
+}
+
+#[tauri::command]
+async fn programs_list(node: tauri::State<'_, Arc<Node>>, space: &str, offset: i64, limit: i64) -> Result<Vec<Program>, String> {
+    let spaces = node.spaces().clone();
+    let router = node.router().clone();
+    tokio::task::block_in_place(|| {
+        tauri::async_runtime::block_on(async move {
+            let space = spaces.get(space).await.ok_or("space not found")?;
+            space.programs().list(&router, offset, limit).await.map_err(|e| e.to_string())
+        })
+    })
+}
+
+#[tauri::command]
+async fn program_run(node: tauri::State<'_, Arc<Node>>, space: &str, _author: &str, program_id: &str, environment: HashMap<String, String>) -> Result<TaskOutput, String> {
+    let program_id = uuid::Uuid::parse_str(program_id).map_err(|e| e.to_string())?;
+    let spaces = node.spaces().clone();
+    let node = node.clone();
+    tokio::task::block_in_place(|| {
+        tauri::async_runtime::block_on(async move {
+            let space = spaces.get(space).await.ok_or("space not found")?;
+            let author_id = node.accounts().await.map_err(|e| e.to_string())?.pop().ok_or("no author").map_err(
+                |e| e.to_string())?;
+            let author = node.router().authors().export(author_id).await.map_err(|e| e.to_string())?.ok_or("no author").map_err(
+                |e| e.to_string())?;
+            node.vm().run_program(&space, author, program_id, environment).await.map_err(|e| e.to_string())
+        })
+    })
+}
+
+#[tauri::command]
+async fn schemas_list(node: tauri::State<'_, Arc<Node>>, space: &str) -> Result<Vec<Schema>, String> {
+    let spaces = node.spaces().clone();
+    let router = node.router().clone();
+    tokio::task::block_in_place(|| {
+        tauri::async_runtime::block_on(async move {
+            let space = spaces.get(space).await.ok_or("space not found")?;
+            space.schemas().list(&router, 0, -1).await.map_err(|e| e.to_string())
+        })
+    })
+}
+
+#[tauri::command]
+async fn schemas_get(node: tauri::State<'_, Arc<Node>>, space: &str, schema: &str) -> Result<Schema, String> {
+    let spaces = node.spaces().clone();
+    let router = node.router().clone();
+    let schema_hash = Hash::from_str(schema).map_err(|e| e.to_string())?;
+    tokio::task::block_in_place(|| {
+        tauri::async_runtime::block_on(async move {
+            let space = spaces.get(space).await.ok_or("space not found")?;
+            space.schemas().get_by_hash(&router, schema_hash).await.map_err(|e| e.to_string())
+        })
+    })
+}
+
+#[tauri::command]
+async fn rows_query(node: tauri::State<'_, Arc<Node>>, space: &str, schema: &str, offset: i64, limit: i64) -> Result<Vec<Row>, String> {
+    let spaces = node.spaces().clone();
+    let router = node.router().clone();
+    let schema_hash = Hash::from_str(schema).map_err(|e| e.to_string())?;
+    tokio::task::block_in_place(|| {
+        tauri::async_runtime::block_on(async move {
+            let space = spaces.get(space).await.ok_or("space not found")?;
+            space.rows().query(&router, schema_hash, String::from(""), offset, limit).await.map_err(|e| e.to_string())
+        })
+    })
 }

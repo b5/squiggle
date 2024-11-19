@@ -225,7 +225,7 @@ fn provider_key(hash: Hash, node_id: NodeId) -> String {
 mod tests {
     use super::*;
     use crate::vm::test_utils::create_router;
-    use crate::vm::workspace::Workspace;
+    use crate::vm::workspace::VM;
     use crate::vm::{config::NodeConfig, test_utils::setup_logging};
     use anyhow::{Context, Result};
     use iroh::base::node_addr::AddrInfoOptions;
@@ -246,7 +246,7 @@ mod tests {
         };
 
         let node_1 = create_router(&repo_1_path, cfg1).await?;
-        let ws1 = Workspace::create(
+        let ws1 = VM::create(
             String::from(ws_name),
             node_1.node_id(),
             &node_1,
@@ -265,8 +265,7 @@ mod tests {
             ..Default::default()
         };
         let node_2 = create_router(&repo_2_path, cfg2).await?;
-        let ws2 =
-            Workspace::join(node_2.node_id(), &node_2, ticket, cfg2.workspace_config()).await?;
+        let ws2 = VM::join(node_2.node_id(), &node_2, ticket, cfg2.workspace_config()).await?;
 
         let (hash, _) = ws1
             .blobs()

@@ -15,7 +15,7 @@ use tracing_subscriber::{fmt, EnvFilter};
 use crate::router::Router;
 
 use super::config::NodeConfig;
-use super::workspace::Workspace;
+use super::workspace::VM;
 
 pub(crate) async fn create_router(data_dir: &PathBuf, cfg: &NodeConfig) -> Result<Router> {
     let secret_key =
@@ -64,7 +64,7 @@ pub fn setup_logging() {
 }
 
 /// Creates a given number of iroh nodes all subscribed to the same workspace
-pub async fn create_nodes(td: &TempDir, num: usize) -> Result<Vec<(Router, Workspace)>> {
+pub async fn create_nodes(td: &TempDir, num: usize) -> Result<Vec<(Router, VM)>> {
     let mut nodes = Vec::new();
     let mut ticket = None;
     let name = "test_workspace".to_string();
@@ -80,8 +80,7 @@ pub async fn create_nodes(td: &TempDir, num: usize) -> Result<Vec<(Router, Works
         match ticket {
             None => {
                 let ws =
-                    Workspace::create(name.clone(), node.node_id(), &node, cfg.workspace_config())
-                        .await?;
+                    VM::create(name.clone(), node.node_id(), &node, cfg.workspace_config()).await?;
                 ticket = Some(
                     ws.get_write_ticket(AddrInfoOptions::RelayAndAddresses)
                         .await?,
@@ -89,7 +88,7 @@ pub async fn create_nodes(td: &TempDir, num: usize) -> Result<Vec<(Router, Works
                 nodes.push((node, ws));
             }
             Some(ref ticket) => {
-                let ws = Workspace::join(
+                let ws = VM::join(
                     node.node_id(),
                     &node,
                     ticket.clone(),

@@ -20,6 +20,7 @@ use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 use crate::router::RouterClient;
+use crate::space::Spaces;
 
 use super::blobs::Blobs;
 use super::doc::{DocEventHandler, Event, EventData};
@@ -42,7 +43,8 @@ pub struct Worker {
     executors: Executors,
     doc: Doc,
     blobs: Blobs,
-    node: RouterClient,
+    spaces: Spaces,
+    router: RouterClient,
     current_jobs: Arc<Mutex<HashSet<Uuid>>>,
     /// If this worker will accept work.
     enabled: Arc<AtomicBool>,
@@ -50,19 +52,21 @@ pub struct Worker {
 
 impl Worker {
     pub async fn new(
+        spaces: Spaces,
+        router: RouterClient,
         author_id: AuthorId,
         doc: Doc,
         blobs: Blobs,
-        node: RouterClient,
         root: impl AsRef<Path>,
     ) -> Result<Self> {
-        let executors = Executors::new(node.clone(), blobs.clone(), root).await?;
+        let executors = Executors::new(spaces.clone(), router.clone(), blobs.clone(), root).await?;
         let w = Self {
+            spaces,
+            router,
             author_id,
             executors,
             doc,
             blobs,
-            node,
             current_jobs: Default::default(),
             enabled: Arc::new(AtomicBool::new(true)),
         };
@@ -132,9 +136,18 @@ impl Worker {
     async fn execute_job(&self, job_id: Uuid, scheduled_job: ScheduledJob) -> Result<JobOutput> {
         info!("executing job {}", job_id);
 
+        let author = self
+            .router
+            .authors()
+            .export(scheduled_job.author)
+            .await?
+            .ok_or_else(|| anyhow!("author not found: {}", scheduled_job.author))?;
+
         let job_ctx = JobContext {
+            space: scheduled_job.description.space,
+            author,
             id: job_id,
-            worker: self.author_id,
+            environment: scheduled_job.description.environment.clone(),
             name: scheduled_job.description.name.clone(),
             name_context: JobNameContext {
                 scope: scheduled_job.scope,
@@ -273,7 +286,7 @@ impl Worker {
 
     async fn get_scheduled_job(&self, job_hash: Hash) -> Result<ScheduledJob> {
         self.blobs.fetch_blob(job_hash).await?;
-        let data = self.node.blobs().read_to_bytes(job_hash).await?;
+        let data = self.router.blobs().read_to_bytes(job_hash).await?;
         let jd = ScheduledJob::try_from(data)?;
         Ok(jd)
     }
@@ -344,7 +357,7 @@ impl Worker {
         // only execute job if we're in the requesting phase
         if is_our_job && status == ExecutionStatus::Requested {
             let self2 = self.clone();
-            let node2 = self.node.clone();
+            let node2 = self.router.clone();
 
             iroh_metrics::inc!(Metrics, worker_jobs_running);
             let res = async {

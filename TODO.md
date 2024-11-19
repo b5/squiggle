@@ -1,15 +1,78 @@
+~~Purpose: Airtable Clone for Laptop-Scale Data~~~
 
+Sqgl: 
+Squiggle: a free, hackable, local-first version of notion on steriods.
+* it's cozy - 
+* archival grade
+* integrate with anything -
+* fully hackable - write programs that extend the full power of webassembly & 
+
+High Level Requirements:
+* keep large amounts of disparate data synced from external sources
+* means of scoping data based on facets of a user's identity
+* connect facets with others
+* permit access to data with others
+* sync that shared data with others
+
+-- 
+
+* [ ] Need a "hard refresh" option, ideally keyboard shortcut
+* [x] bundler should move into node
+
+--
+
+* [x] Mon Nov 11 - Schema Validate, Write, Create
+* [ ] Tue Nov 12 - UI Display Speedrun
+  * [x] Paginate through schema Data
+    * [ ] Settings program
+* [ ] Wed Nov 13 - Everything is a program
+  * [ ] program constructor function in repo
+    * [x] node CLI command for building programs
+  * [x] become browser
+* [ ] Sunday Nov 17
+  * [ ] execute programs from iroh collection source
+  * [ ] List Programs within UI
+  * [ ] Share Program via ticket
+  * [ ] Fetch Program via ticket (in UI)
+  * [ ] Execute program
+  * [ ] Bullet-point overview of system design
+* [ ] Thu Nov 14 - Ticket-Based Share flow
+  * [ ] std schemas
+  * [ ] Construct Blob of events
+  * [ ] Add events from ticket
+* [ ] Fri Nov 15 - Demo for team
+  * [ ] inline small amounts of content into events table in JSON format 
+
+--
+Initial MVP Flow:
+* [ ] List available bots
+* [ ] Enable bot
+* [ ] Display Run Status
+* [ ] Review Local Data
+* [ ] Search Local Data
+-- --
+* [ ] Connect with Friends
+* [ ] One-off sharing
+
+-- --
 * [x] Sqlite Events Table
 * [x] VM Compiles 
 * [x] list accounts on frontend
-* [ ] Automation 1
+* [x] Automation 1
   * [x] Hello-world WASM Execution
   * [x] Tasks & Jobs
   * [x] Wire up job kickoff to the frontend
   * [x] interface to write blobs (re-using fog uploads dir)
-  * [ ] write a task that creates one or more blobs
+  * [x] write a task that creates one or more blobs
+* App Detour 1:
+  * [ ] build out project scores database:
+    * [x] add a single event for every entry
+  * [ ] app-side schema viewer
+* [ ] Schemas are JSON Schemas
 * [ ] Events 1
-  * [ ] Jobs are associated with accounts
+  * [x] Jobs are associated with accounts
+  * [ ] bots schema
+  * [ ] jobs schema
   * [ ] create event on job run
   * [ ] interface to write events
   * [ ] written from a job get a collection
@@ -20,6 +83,11 @@
     * [ ] Github User Data Example
     * [ ] Twitter User Data Example
   * [ ] Reduce function that constructs account context?
+* [ ] App Detour 2
+  * [ ] encode existing notion table as jsonschema:
+      * can we just use notion's schema for this?
+      * let's start with some simple illustration that adheres to jsonschema
+      * [ ] add schema as a collection: 1th blob is schema, prior schemas are 2-Nth blobs
 * [ ] Sync 1
   * Connect & Sync All events
 * [ ] Search Index
@@ -33,4 +101,6 @@
 * [ ] Access Control 1
   * [ ] 
 * [ ] Blob Persistence
-* [ ] Secrets for Bots
+* [x] Pass config to bots
+* [ ] Store Secrets for bots
+* [ ] set up some sort of auto-update for tauri UI
