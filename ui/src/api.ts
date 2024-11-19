@@ -1,6 +1,17 @@
 import { useEffect, useState } from "react";
 import { invoke, InvokeArgs } from "@tauri-apps/api/core";
 
+import { User, Program, Schema, Row, Space } from "@/types";
+
+export interface SpaceParam {
+  space: string;
+}
+
+export interface Pagination {
+  offset?: number;
+  limit?: number;
+}
+
 export interface ApiEnvelope<O> {
   isLoading: boolean;
   data?: O;
@@ -22,21 +33,10 @@ function ApiFactory<I, O>(method_name: string): ((i: I) => ApiEnvelope<O>) {
   }
 }
 
-export interface Pagination {
-  offset?: number;
-  limit?: number;
-}
-
-export interface Schema {
-  hash: string;
-  name: string;
-  description: string;
-}
-
-export interface Event {
-  hash: string;
-  data: string;
-}
-
-export const useListSchemas = ApiFactory<Pagination, [Schema]>("schemas_list");
-export const useQueryRows = ApiFactory<{ schema: string } & Pagination, [Event]>("rows_query");
+export const useListSpaces = ApiFactory<Pagination, [Space]>("spaces_list");
+export const useQueryUsers = ApiFactory<SpaceParam & Pagination, [User]>("users_list");
+export const useQueryPrograms = ApiFactory<SpaceParam & Pagination, [Program]>("programs_list");
+export const useRunProgram = ApiFactory<SpaceParam & { id: string }, Program>("programs_run");
+export const useQuerySchemas = ApiFactory<SpaceParam & Pagination, [Schema]>("schemas_list");
+export const useQuerySchema = ApiFactory<SpaceParam & { schema: string }, Schema>("schemas_get");
+export const useQueryRows = ApiFactory<SpaceParam & { schema: string } & Pagination, [Row]>("rows_query");

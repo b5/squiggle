@@ -498,8 +498,8 @@ pub async fn run(default_node: NodeAddr, serve_addr: String) -> anyhow::Result<(
 
     #[rustfmt::skip]
     let app = Router::new()
-        .route(":blake3_hash", get(handle_local_collection_index))
-        .route(":blake3_hash/*path", get(handle_local_collection_request))
+        .route("/:blake3_hash", get(handle_local_collection_index))
+        .route("/:blake3_hash/*path", get(handle_local_collection_request))
         // .route("/blob/:blake3_hash", get(handle_local_blob_request))
         // .route("/collection/:blake3_hash", get(handle_local_collection_index))
         // .route("/collection/:blake3_hash/*path",get(handle_local_collection_request))

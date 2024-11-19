@@ -1,3 +1,8 @@
+
+export interface Space {
+  name: string;
+}
+
 export interface User {
 
 }

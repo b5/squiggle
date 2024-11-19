@@ -1,4 +1,4 @@
-use std::cmp::Ordering;
+use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -8,14 +8,8 @@ use datalayer_node::space::rows::Row;
 use datalayer_node::space::schemas::Schema;
 use datalayer_node::space::users::User;
 use datalayer_node::space::SpaceDetails;
+use datalayer_node::vm::flow::TaskOutput;
 use datalayer_node::Hash;
-use tauri::{Runtime, LogicalPosition, LogicalSize, WebviewUrl, Listener};
-use tauri::webview::PageLoadEvent;
-
-const FRAME_LABEL: &str = "frame";
-const WEB_LABEL: &str = "web";
-const COZY_LABEL: &str = "cozy";
-const CHROME_LABEL: &str = "chrome";
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -33,124 +27,10 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
-        .setup(|app| {
-            let width = 1600.;
-            let height = 900.;
-            let window = tauri::window::WindowBuilder::new(app, "main")
-                .inner_size(width, height)
-                .build()?;
-
-            window.add_child(
-                tauri::webview::WebviewBuilder::new(FRAME_LABEL, WebviewUrl::App("sidebar.html".into()))
-                    .transparent(true)
-                    .auto_resize(),
-                LogicalPosition::new(0., 0.),
-                LogicalSize::new(width, height),
-            )?;
-
-            let url = tauri::Url::parse("https://iroh.computer")?;
-            let page_builder = tauri::webview::WebviewBuilder::new(WEB_LABEL, WebviewUrl::External(url))
-                .auto_resize()
-                .on_page_load(|_webview, payload| {
-                    match payload.event() {
-                    PageLoadEvent::Started => {
-                        println!("{} started loading", payload.url());
-                    }
-                    PageLoadEvent::Finished => {
-                        println!("{} finished loading", payload.url());
-                    }
-                    }
-                });
-
-            window.add_child(page_builder,
-                LogicalPosition::new(12., 12.),
-                LogicalSize::new(width - 24., height - 24.),
-            )?;
-
-            window.add_child(
-                tauri::webview::WebviewBuilder::new(COZY_LABEL, WebviewUrl::App("cozy.html".into()))
-                    .auto_resize(),
-                LogicalPosition::new(12., 12.),
-                LogicalSize::new(width - 24., height - 24.),
-            )?;
-
-            window.add_child(
-                tauri::webview::WebviewBuilder::new(CHROME_LABEL, WebviewUrl::App("chrome.html".into()))
-                    .auto_resize(),
-                LogicalPosition::new(0., 0.),
-                LogicalSize::new(width, height),
-            )?;
-
-
-            let window2 = window.clone();
-            window.listen("dismiss-ui", move |_event| {
-                println!("dismissing ui");
-                for view in window2.webviews() {
-                    if view.label() == CHROME_LABEL {
-                        view.hide().expect("failed to hide webview");
-                    }
-                }
-            });
-
-            let window3 = window.clone();
-            window.listen("show-ui", move |_event| {
-                println!("showing ui");
-                for view in window3.webviews() {
-                    if view.label() == CHROME_LABEL {
-                        view.show().expect("failed to show webview");
-                    }
-                }
-            });
-
-            Ok(())
-        })
         .manage(Arc::new(node))
-        .invoke_handler(tauri::generate_handler![navigate, spaces_list, users_list, programs_list, schemas_list, schemas_get, rows_query])
+        .invoke_handler(tauri::generate_handler![spaces_list, users_list, programs_list, program_run, schemas_list, schemas_get, rows_query])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
-}
-
-#[tauri::command]
-async fn navigate<R: Runtime>(window: tauri::Window<R>, url: &str) -> Result<(), String> {
-    if url.starts_with("http://") || url.starts_with("https://") {
-        for mut view in window.webviews() {
-            match view.label() {
-                WEB_LABEL => {
-                    let url = tauri::Url::parse(url).map_err(|e| e.to_string())?;
-                    view.navigate(url.clone()).map_err(|e| e.to_string())?;
-                    view.show().map_err(|e| e.to_string())?;
-                }
-                COZY_LABEL => {
-                    view.hide().map_err(|e| e.to_string())?;
-                }
-                _ => {}
-            }
-        }
-    } else if url.starts_with("cozy://") {
-        for mut view in window.webviews() {
-            match view.label() {
-                WEB_LABEL => {
-                    view.hide().map_err(|e| e.to_string())?;
-                }
-                COZY_LABEL => {
-                    let raw_hash_len = "cozy://".len() + 32;
-                    let url = match url.chars().count().cmp(&raw_hash_len) {
-                        Ordering::Equal => url.replace("cozy://", "http://localhost:8080/collection/"),
-                        // for dev server access
-                        _ => url.replace("cozy://", "http://")
-                    };
-                        
-                    println!("navigating to cozy url: {:?}", url);
-                    let url = tauri::Url::parse(url.as_str()).map_err(|e| e.to_string())?;
-                    view.navigate(url.clone()).map_err(|e| e.to_string())?;
-                    view.show().map_err(|e| e.to_string())?;
-                }
-                _ => {}
-            }
-        }
-    }
-
-    Ok(())
 }
 
 #[tauri::command]
@@ -196,19 +76,22 @@ async fn programs_list(node: tauri::State<'_, Arc<Node>>, space: &str, offset: i
     })
 }
 
-// #[tauri::command]
-// async fn program_run(node: tauri::State<'_, Arc<Node>>, id: &str, environment: HashMap<String, String>) -> Result<TaskOutput, String> {
-//     let id = uuid::Uuid::parse_str(id).map_err(|e| e.to_string())?;
-//     let node = node.clone();
-//     tokio::task::block_in_place(|| {
-//         tauri::async_runtime::block_on(async move {
-//             let author_id = node.repo().users().authors().await.map_err(|e| e.to_string())?.pop().ok_or("no author").map_err(
-//                 |e| e.to_string())?;
-//             let author = node.repo().router().authors().export(author_id).await.map_err(|e| e.to_string())?.expect("author to exist");
-//             node.vm().run_program(DEFAULT_WORKSPACE, author, id, environment).await.map_err(|e| e.to_string())
-//         })
-//     })
-// }
+#[tauri::command]
+async fn program_run(node: tauri::State<'_, Arc<Node>>, space: &str, _author: &str, program_id: &str, environment: HashMap<String, String>) -> Result<TaskOutput, String> {
+    let program_id = uuid::Uuid::parse_str(program_id).map_err(|e| e.to_string())?;
+    let spaces = node.spaces().clone();
+    let node = node.clone();
+    tokio::task::block_in_place(|| {
+        tauri::async_runtime::block_on(async move {
+            let space = spaces.get(space).await.ok_or("space not found")?;
+            let author_id = node.accounts().await.map_err(|e| e.to_string())?.pop().ok_or("no author").map_err(
+                |e| e.to_string())?;
+            let author = node.router().authors().export(author_id).await.map_err(|e| e.to_string())?.ok_or("no author").map_err(
+                |e| e.to_string())?;
+            node.vm().run_program(&space, author, program_id, environment).await.map_err(|e| e.to_string())
+        })
+    })
+}
 
 #[tauri::command]
 async fn schemas_list(node: tauri::State<'_, Arc<Node>>, space: &str) -> Result<Vec<Schema>, String> {

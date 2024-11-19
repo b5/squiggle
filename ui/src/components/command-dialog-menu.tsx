@@ -1,6 +1,6 @@
 import * as React from "react"
+import { useNavigate } from "react-router-dom"
 import {
-  ArrowRight,
   Calculator,
   Calendar,
   CreditCard,
@@ -8,10 +8,10 @@ import {
   Smile,
   User,
 } from "lucide-react"
-import { emit } from '@tauri-apps/api/event';
 
 import {
   CommandDialog,
+  CommandEmpty,
   CommandGroup,
   CommandInput,
   CommandItem,
@@ -20,61 +20,46 @@ import {
   CommandShortcut,
 } from "@/components/ui/command"
 
-export function CommandDialogMenu({ navigate }: { navigate: (to: string) => void }) {
-  const [value, setValue] = React.useState("")
-  const [searchValue, setSearchValue] = React.useState("")
+export function CommandDialogMenu() {
+  const navigate = useNavigate()
+  const [open, setOpen] = React.useState(false)
 
   React.useEffect(() => {
     const down = (e: KeyboardEvent) => {
       if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault()
-        emit('dismiss-ui', {})
-      } else if (e.key === "Escape") {
-        emit('dismiss-ui', {})
+        setOpen((open) => !open)
+      } else if (e.key === "Enter" && open) {
+        setOpen(false)
+        return
       }
     }
 
     document.addEventListener("keydown", down)
-
     return () => document.removeEventListener("keydown", down)
   }, [])
 
-  const navHandler = (url: string) => {
-    return () => {
-      navigate(url)
-      emit('dismiss-ui', {})
-    }
-  }
-
   return (
-    <CommandDialog open={true} onOpenChange={(newOpen)  => { if (!newOpen) { emit('dismiss-ui', {}) } }} value={value} onValueChange={(v) => { setValue(v); }}>
-      <CommandInput value={searchValue} onValueChange={(v) => setSearchValue(v)} placeholder="Type a command or search..." />
+    <CommandDialog open={open} onOpenChange={setOpen}>
+      <CommandInput placeholder="Type a command or search..." />
       <CommandList>
-        <CommandGroup>
-          <CommandItem value={searchValue} onSelect={(url) => {
-            navigate(url)
-            emit('dismiss-ui', {})
-          }}>
-              <ArrowRight />
-              <span>go</span>
-          </CommandItem>
-        </CommandGroup>
+        <CommandEmpty>No results found.</CommandEmpty>
         <CommandGroup heading="Suggestions">
-          <CommandItem value="calendar" onSelect={navHandler("cozy://localhost:5173#programs")}>
+          <CommandItem>
             <Calendar />
-            <span>Programs</span>
+            <span>Calendar</span>
           </CommandItem>
-          <CommandItem value="emoji" onSelect={navHandler("cozy://localhost:5173#data")}>
+          <CommandItem>
             <Smile />
-            <span>Data</span>
+            <span>Search Emoji</span>
           </CommandItem>
-          <CommandItem value="accounts" onSelect={navHandler("cozy://localhost:5173")}>
+          <CommandItem>
             <Calculator />
-            <span>Accounts</span>
+            <span>Calculator</span>
           </CommandItem>
         </CommandGroup>
         <CommandSeparator />
-        {/* <CommandGroup heading="Settings">
+        <CommandGroup heading="Settings">
           <CommandItem>
             <User />
             <span>Profile</span>
@@ -90,7 +75,7 @@ export function CommandDialogMenu({ navigate }: { navigate: (to: string) => void
             <span>Settings</span>
             <CommandShortcut>⌘S</CommandShortcut>
           </CommandItem>
-        </CommandGroup> */}
+        </CommandGroup>
       </CommandList>
     </CommandDialog>
   )

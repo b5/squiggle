@@ -1,11 +1,12 @@
-import { Link } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 
 import { useQuerySchemas } from "@/api"
 import { Loading } from "@/components/ui/loading";
 
 
 export function Component() {
-  const { isLoading, data } = useQuerySchemas({ offset: 0, limit: 10 });
+  let { space = "" }  = useParams<{ space: string }>();
+  const { isLoading, data } = useQuerySchemas({ space, offset: 0, limit: 10 });
 
   if (isLoading) {
     return <Loading />
@@ -20,8 +21,7 @@ export function Component() {
       {data?.map((schema, i) => {
         return (
           <div key={i} className="p-2 border-b">
-            <Link to={`/data/${schema.content.hash}`} className="cursor-pointer">{schema.title}</Link>
-            <span>{JSON.stringify(schema)}</span>
+            <Link to={`/${space}/tables/${schema.content.hash}`} className="cursor-pointer">{schema.title}</Link>
           </div>
         )
       })}

@@ -1,9 +1,12 @@
 import { useQueryPrograms } from "@/api";
 import { Loading } from "@/components/ui/loading";
+import { useParams } from "react-router-dom";
 
 
 export function Component() {
-  const { isLoading, data } = useQueryPrograms({ offset: 0, limit: -1 });
+  const { space = "" } = useParams<{ space: string }>();
+  const { isLoading, data } = useQueryPrograms({ space, offset: 0, limit: -1 });
+  
   if (isLoading) {
     return <Loading />;
   }

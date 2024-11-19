@@ -81,10 +81,12 @@ pub struct Spaces {
 impl Spaces {
     pub async fn open_all(base_path: impl Into<PathBuf>) -> Result<Self> {
         let path = base_path.into();
-        let spaces = Self::read_from_file(&path.join(SPACES_FILENAME)).await?;
+        println!("open spaces at path {:?}", path);
+        let spaces = Self::read_from_file(&path).await?;
         let mut map = HashMap::new();
         for deets in spaces {
             let space = Space::open(deets.name, deets.secret, path.clone()).await?;
+            println!("opened space {:?}", space);
             map.insert(space.name.clone(), space);
         }
         Ok(Self {
@@ -143,8 +145,12 @@ impl Spaces {
         self.spaces.read().await.get(name).cloned()
     }
 
+    fn spaces_path(path: impl Into<PathBuf>) -> PathBuf {
+        path.into().join(SPACES_FILENAME)
+    }
+
     async fn read_from_file(base_path: impl Into<PathBuf>) -> Result<Vec<SpaceDetails>> {
-        let path = base_path.into().join(SPACES_FILENAME);
+        let path = Self::spaces_path(base_path);
         if !path.exists() {
             return Ok(Vec::new());
         }
@@ -154,21 +160,21 @@ impl Spaces {
     }
 
     async fn write_to_file(&self, details: Vec<SpaceDetails>) -> Result<()> {
-        let path = self.path.join(SPACES_FILENAME);
         let file = serde_json::to_vec(&details)?;
-        tokio::fs::write(&path, file).await?;
+        tokio::fs::write(Self::spaces_path(&self.path), file).await?;
         Ok(())
     }
 
     pub async fn list(&self, _offset: i64, _limit: i64) -> Result<Vec<SpaceDetails>> {
-        Self::read_from_file(self.path.join(SPACES_FILENAME)).await
+        let results = Self::read_from_file(&self.path).await?;
+        Ok(results)
     }
 
     // async fn write_all(
     //     base_path: impl Into<PathBuf>,
     //     spaces: HashMap<String, Space>,
     // ) -> Result<()> {
-    //     let path = base_path.into().join(SPACES_FILENAME);
+    //     let path = base_path.into();
     //     let spaces = spaces
     //         .into_iter()
     //         .map(|(name, space)| SpaceDetails {

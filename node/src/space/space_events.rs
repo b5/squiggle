@@ -35,7 +35,7 @@ impl EventObject for SpaceEvent {
 
         // fetch content if necessary
         // TODO(b5): I know the double serializing is terrible
-        let (content, title) = match event.content.value {
+        let (content, _title) = match event.content.value {
             None => {
                 let content = client.blobs().read_to_bytes(event.content.hash).await?;
                 let meta =

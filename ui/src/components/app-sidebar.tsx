@@ -1,3 +1,4 @@
+import { Link, useParams } from "react-router-dom"
 import { Home, Bot, User, HardDrive } from "lucide-react"
 
 import {
@@ -10,33 +11,34 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
-import { Link } from "react-router-dom"
 
-// Menu items.
-const items = [
-  {
-    title: "Home",
-    url: "/",
-    icon: Home,
-  },
-  {
-    title: "Programs",
-    url: "/programs",
-    icon: Bot
-  },
-  {
-    title: "People",
-    url: "/people",
-    icon: User,
-  },
-  {
-    title: "Data",
-    url: "/data",
-    icon: HardDrive,
-  }
-]
 
 export function AppSidebar() {
+  const { space = "" }  = useParams<{ space: string }>();
+
+  const items = [
+    {
+      title: "Home",
+      url: `/${space}`,
+      icon: Home,
+    },
+    {
+      title: "Programs",
+      url: `/${space}/programs`,
+      icon: Bot
+    },
+    {
+      title: "People",
+      url: `/${space}/people`,
+      icon: User,
+    },
+    {
+      title: "Data",
+      url: `/${space}/tables`,
+      icon: HardDrive,
+    }
+  ]
+  
   return (
     <Sidebar>
       <SidebarContent>
