@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { invoke, InvokeArgs } from "@tauri-apps/api/core";
 
-import { User, Program, Schema, Row, Space } from "@/types";
+import { User, Program, Schema, Row, Space, Event } from "@/types";
 
 export interface SpaceParam {
   space: string;
@@ -31,6 +31,25 @@ function ApiFactory<I, O>(method_name: string): ((i: I) => ApiEnvelope<O>) {
 
     return envelope;
   }
+}
+
+export const useEventSearch = (space: string, query: string, offset: number, limit: number): ApiEnvelope<Event[]> => {
+  const [envelope, setEnvelope] = useState<ApiEnvelope<Event[]>>({
+    isLoading: true,
+  });
+
+  useEffect(() => {
+    if (query == "") {
+      setEnvelope({ isLoading: false, data: [] });
+    }
+
+    invoke("events_search", { space, query, limit, offset }).then((res) => {
+      console.log(res);
+      setEnvelope({ isLoading: false, data: res as Event[] });
+    });
+  }, [space, query, limit, offset]);
+
+  return envelope;
 }
 
 export const useListSpaces = ApiFactory<Pagination, [Space]>("spaces_list");

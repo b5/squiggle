@@ -7,6 +7,7 @@ use datalayer_node::space::programs::Program;
 use datalayer_node::space::rows::Row;
 use datalayer_node::space::schemas::Schema;
 use datalayer_node::space::users::User;
+use datalayer_node::space::events::Event;
 use datalayer_node::space::SpaceDetails;
 use datalayer_node::vm::flow::TaskOutput;
 use datalayer_node::Hash;
@@ -28,7 +29,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .manage(Arc::new(node))
-        .invoke_handler(tauri::generate_handler![spaces_list, users_list, programs_list, program_run, schemas_list, schemas_get, rows_query])
+        .invoke_handler(tauri::generate_handler![spaces_list, events_search, users_list, programs_list, program_run, schemas_list, schemas_get, rows_query])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
@@ -60,6 +61,23 @@ async fn spaces_list(
     tokio::task::block_in_place(|| {
         tauri::async_runtime::block_on(async move {
             node.spaces().list(offset, limit).await.map_err(|e| e.to_string())
+        })
+    })      
+}
+
+#[tauri::command]
+async fn events_search(
+    node: tauri::State<'_, Arc<Node>>,
+    space: &str,
+    query: &str,
+    offset: i64,
+    limit: i64,
+) -> Result<Vec<Event>, String> {
+    let node = node.clone();
+    tokio::task::block_in_place(|| {
+        tauri::async_runtime::block_on(async move {
+            let space = node.spaces().get(space).await.ok_or("space not found")?;
+            space.search(query, offset, limit).await.map_err(|e| e.to_string())
         })
     })      
 }

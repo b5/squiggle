@@ -1,5 +1,5 @@
 import * as React from "react"
-import { useNavigate } from "react-router-dom"
+import { useNavigate, useParams } from "react-router-dom"
 import {
   Calculator,
   Calendar,
@@ -19,10 +19,15 @@ import {
   CommandSeparator,
   CommandShortcut,
 } from "@/components/ui/command"
+import { useEventSearch } from "@/api"
+import { Loading } from "./ui/loading"
 
 export function CommandDialogMenu() {
+  const { space = "" } = useParams<{ space: string }>()
   const navigate = useNavigate()
   const [open, setOpen] = React.useState(false)
+  const [query, setQuery] = React.useState("")
+  const { isLoading, data } = useEventSearch(space, query, 0, 1000);
 
   React.useEffect(() => {
     const down = (e: KeyboardEvent) => {
@@ -41,9 +46,18 @@ export function CommandDialogMenu() {
 
   return (
     <CommandDialog open={open} onOpenChange={setOpen}>
-      <CommandInput placeholder="Type a command or search..." />
+      <CommandInput placeholder="Type a command or search..." value={query} onValueChange={setQuery} />
       <CommandList>
         <CommandEmpty>No results found.</CommandEmpty>
+        {(data || isLoading) && <CommandGroup heading="Search Results">
+          {isLoading && <Loading />}
+          {data && data.map((event) => (
+            <CommandItem key={event.id} onSelect={() => navigate(`/${space}/tables`)}>
+              <span>{event.id}</span>
+              <span>{event.createdAt}</span>
+            </CommandItem>
+          ))}
+        </CommandGroup>}
         <CommandGroup heading="Suggestions">
           <CommandItem>
             <Calendar />

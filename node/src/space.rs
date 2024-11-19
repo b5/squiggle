@@ -3,7 +3,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::Result;
+use events::{Event, EVENT_SQL_READ_FIELDS};
 use iroh::docs::{Author, NamespaceId, NamespaceSecret};
+use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
@@ -70,6 +72,19 @@ impl Space {
     pub fn rows(&self) -> rows::Rows {
         rows::Rows::new(self.clone())
     }
+
+    pub async fn search(&self, query: &str, offset: i64, limit: i64) -> Result<Vec<Event>> {
+        let conn = self.db.lock().await;
+        let mut stmt = conn.prepare(
+            format!("SELECT {EVENT_SQL_READ_FIELDS} FROM events WHERE content LIKE '%' || ?1 || '%' COLLATE NOCASE ORDER BY created_at DESC LIMIT ?2 OFFSET ?3").as_str()
+        )?;
+        let mut rows = stmt.query(params![query, limit, offset])?;
+        let mut events = Vec::new();
+        while let Some(row) = rows.next()? {
+            events.push(Event::from_sql_row(row)?);
+        }
+        Ok(events)
+    }
 }
 
 const SPACES_FILENAME: &str = "spaces.json";
@@ -97,7 +112,6 @@ impl Spaces {
         let mut map = HashMap::new();
         for deets in spaces {
             let space = Space::open(deets.name, deets.secret, router.clone(), path.clone()).await?;
-            println!("opened space {:?}", space);
             map.insert(space.name.clone(), space);
         }
         Ok(Self {

@@ -290,7 +290,7 @@ impl HashLink {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub(crate) struct Tag(String, String, Option<String>);
+pub struct Tag(String, String, Option<String>);
 
 impl Tag {
     pub fn new(name: &str, value: &str) -> Self {
@@ -312,7 +312,7 @@ impl Tag {
 // }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub(crate) struct Event {
+pub struct Event {
     pub id: Sha256Digest,
     pub pubkey: PublicKey,
     #[serde(rename = "createdAt")]
@@ -430,7 +430,7 @@ impl Event {
     pub(crate) async fn write(&self, db: &DB) -> Result<()> {
         let schema = self.schema()?.map(|s| s.to_string());
         let data_id = self.data_id()?;
-        let sig = self.sig.map_or(None, |sig| Some(sig.to_bytes()));
+        let sig = self.sig.map(|sig| Some(sig.to_bytes()));
         let value = match self.content.data {
             Some(ref v) => Some(v.to_bytes()?),
             None => None,
