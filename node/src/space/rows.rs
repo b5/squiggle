@@ -88,18 +88,16 @@ impl Rows {
 
     pub async fn create(
         &self,
-        router: &RouterClient,
         author: Author,
         schema: Hash,
         data: serde_json::Value,
     ) -> Result<Row> {
         let data_id = Uuid::new_v4();
-        self.mutate(router, author, schema, data_id, data).await
+        self.mutate(author, schema, data_id, data).await
     }
 
     pub async fn mutate(
         &self,
-        router: &RouterClient,
         author: Author,
         schema_hash: Hash,
         id: Uuid,
@@ -107,16 +105,15 @@ impl Rows {
     ) -> Result<Row> {
         self.0
             .schemas()
-            .get_by_hash(router, schema_hash)
+            .get_by_hash(schema_hash)
             .await
             .context("loading schema")?
-            .mutate_row(router, &self.0, author, id, data)
+            .mutate_row(&self.0, author, id, data)
             .await
     }
 
     pub async fn query(
         &self,
-        router: &RouterClient,
         schema: Hash,
         _query: String,
         offset: i64,
@@ -128,7 +125,7 @@ impl Rows {
         let mut events = Vec::new();
 
         while let Some(row) = rows.next()? {
-            let event = Row::from_sql_row(row, router).await?;
+            let event = Row::from_sql_row(row, &self.0.router).await?;
             events.push(event);
         }
         Ok(events)

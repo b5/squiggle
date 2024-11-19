@@ -56,11 +56,7 @@ async fn main() -> Result<()> {
         Err(_) => {
             space
                 .programs()
-                .create(
-                    node.router(),
-                    author.clone(),
-                    "../programs/github_repo_stargazers/dist",
-                )
+                .create(author.clone(), "../programs/github_repo_stargazers/dist")
                 .await?
         }
     };

@@ -168,7 +168,7 @@ impl VM {
         id: Uuid,
         environment: HashMap<String, String>,
     ) -> Result<TaskOutput> {
-        let program = space.programs().get_by_id(&self.router, id).await?;
+        let program = space.programs().get_by_id(id).await?;
         let program_entry_hash = program.program_entry.context("program has no main entry")?;
         // construct a task so we can schedule it with the VM
         let result = Flow {

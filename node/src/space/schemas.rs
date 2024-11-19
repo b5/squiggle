@@ -113,23 +113,22 @@ impl Schema {
 
     pub async fn create_row(
         &mut self,
-        router: &RouterClient,
         space: &Space,
         author: Author,
         data: serde_json::Value,
     ) -> Result<Row> {
         let id = Uuid::new_v4();
-        self.mutate_row(router, space, author, id, data).await
+        self.mutate_row(space, author, id, data).await
     }
 
     pub async fn mutate_row(
         &mut self,
-        router: &RouterClient,
         space: &Space,
         author: Author,
         id: Uuid,
         data: serde_json::Value,
     ) -> Result<Row> {
+        let router = space.router();
         // validate data matches schema
         let validator = self.validator(router).await.context("getting validator")?;
         if let Err(e) = validator.validate(&data) {
@@ -168,38 +167,22 @@ impl Schemas {
         Schemas(repo)
     }
 
-    pub async fn load_or_create(
-        &self,
-        router: &RouterClient,
-        author: Author,
-        data: Bytes,
-    ) -> Result<Schema> {
+    pub async fn load_or_create(&self, author: Author, data: Bytes) -> Result<Schema> {
         let meta: SchemaMetadata = serde_json::from_slice(&data)?;
 
-        let schema = self.get_by_title(router, &meta.title).await;
+        let schema = self.get_by_title(&meta.title).await;
         match schema {
             Ok(schema) => Ok(schema),
-            Err(_) => self.create(router, author, data).await,
+            Err(_) => self.create(author, data).await,
         }
     }
 
-    pub async fn create(
-        &self,
-        router: &RouterClient,
-        author: Author,
-        data: Bytes,
-    ) -> Result<Schema> {
+    pub async fn create(&self, author: Author, data: Bytes) -> Result<Schema> {
         let id = Uuid::new_v4();
-        self.mutate(router, author, id, data).await
+        self.mutate(author, id, data).await
     }
 
-    pub async fn mutate(
-        &self,
-        router: &RouterClient,
-        author: Author,
-        id: Uuid,
-        data: Bytes,
-    ) -> Result<Schema> {
+    pub async fn mutate(&self, author: Author, id: Uuid, data: Bytes) -> Result<Schema> {
         // let schema = Schema::new(data.to_string());
         // TODO - should construct a HashSeq, place the new schema as the 1th element
         // and update the metadata in 0th element
@@ -217,7 +200,7 @@ impl Schemas {
         // TODO - test that this enforces field ordering
         let serialized = serde_json::to_vec(&schema)?;
 
-        let res = router.blobs().add_bytes(serialized).await?;
+        let res = self.0.router.blobs().add_bytes(serialized).await?;
 
         let schema = Schema {
             id,
@@ -237,16 +220,16 @@ impl Schemas {
         Ok(schema)
     }
 
-    pub async fn get_by_title(&self, router: &RouterClient, name: &str) -> Result<Schema> {
+    pub async fn get_by_title(&self, name: &str) -> Result<Schema> {
         // TODO - SLOW
-        self.list(router, 0, -1)
+        self.list(0, -1)
             .await?
             .into_iter()
             .find(|schema| schema.title == name)
             .ok_or_else(|| anyhow!("schema not found"))
     }
 
-    pub async fn get_by_hash(&self, router: &RouterClient, hash: Hash) -> Result<Schema> {
+    pub async fn get_by_hash(&self, hash: Hash) -> Result<Schema> {
         // TODO - SLOW
         let conn = self.0.db.lock().await;
         let mut stmt = conn
@@ -258,18 +241,13 @@ impl Schemas {
 
         let mut rows = stmt.query(params![EventKind::MutateSchema, hash.to_string()])?;
         if let Some(row) = rows.next()? {
-            return Schema::from_sql_row(row, router).await;
+            return Schema::from_sql_row(row, &self.0.router).await;
         }
 
         Err(anyhow!("schema not found"))
     }
 
-    pub async fn list(
-        &self,
-        router: &RouterClient,
-        offset: i64,
-        limit: i64,
-    ) -> Result<Vec<Schema>> {
+    pub async fn list(&self, offset: i64, limit: i64) -> Result<Vec<Schema>> {
         let conn = self.0.db.lock().await;
         let mut stmt = conn
             .prepare(
@@ -281,7 +259,7 @@ impl Schemas {
 
         let mut schemas = Vec::new();
         while let Some(row) = rows.next()? {
-            let schema = Schema::from_sql_row(row, router)
+            let schema = Schema::from_sql_row(row, &self.0.router)
                 .await
                 .context("parsing schema row")?;
             schemas.push(schema);

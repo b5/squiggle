@@ -125,19 +125,13 @@ impl Programs {
         Programs(repo)
     }
 
-    pub async fn create(
-        &self,
-        router: &RouterClient,
-        author: Author,
-        path: impl Into<PathBuf>,
-    ) -> Result<Program> {
+    pub async fn create(&self, author: Author, path: impl Into<PathBuf>) -> Result<Program> {
         let id = Uuid::new_v4();
-        self.mutate(router, author, id, path).await
+        self.mutate(author, id, path).await
     }
 
     pub async fn mutate(
         &self,
-        router: &RouterClient,
         author: Author,
         id: Uuid,
         path: impl Into<PathBuf>,
@@ -157,7 +151,7 @@ impl Programs {
         let manifest: Manifest = serde_json::from_slice(data.as_slice())?;
 
         // create collection
-        let (hash, _size, collection) = import(router.blobs(), path).await?;
+        let (hash, _size, collection) = import(self.0.router.blobs(), path).await?;
 
         // build program
         let (html_index, program_entry) = Program::hash_pointers(&manifest, &collection)?;
@@ -245,16 +239,16 @@ impl Programs {
         Program::from_event(event, router).await
     }
 
-    pub async fn get_by_name(&self, router: &RouterClient, name: String) -> Result<Program> {
+    pub async fn get_by_name(&self, name: String) -> Result<Program> {
         // TODO (b5) - I know. this is terrible
-        self.list(router, 0, -1)
+        self.list(0, -1)
             .await?
             .into_iter()
             .find(|program| program.manifest.name == name)
             .ok_or_else(|| anyhow!("Program not found"))
     }
 
-    pub async fn get_by_id(&self, router: &RouterClient, id: Uuid) -> Result<Program> {
+    pub async fn get_by_id(&self, id: Uuid) -> Result<Program> {
         let conn = self.0.db.lock().await;
         println!("getting program: {:?}", id);
         let mut stmt = conn
@@ -266,7 +260,7 @@ impl Programs {
         let mut rows = stmt.query(params![EventKind::MutateProgram, id])?;
 
         if let Some(row) = rows.next()? {
-            Program::from_sql_row(row, router).await
+            Program::from_sql_row(row, &self.0.router).await
         } else {
             Err(anyhow!("Program not found"))
         }
@@ -282,12 +276,7 @@ impl Programs {
         //     .ok_or_else(|| anyhow!("Program not found"))
     }
 
-    pub async fn list(
-        &self,
-        router: &RouterClient,
-        offset: i64,
-        limit: i64,
-    ) -> Result<Vec<Program>> {
+    pub async fn list(&self, offset: i64, limit: i64) -> Result<Vec<Program>> {
         let conn = self.0.db.lock().await;
         let mut stmt = conn
             .prepare(
@@ -299,7 +288,7 @@ impl Programs {
 
         let mut programs = Vec::new();
         while let Some(row) = rows.next()? {
-            let program = Program::from_sql_row(row, router).await?;
+            let program = Program::from_sql_row(row, &self.0.router).await?;
             programs.push(program);
         }
         Ok(programs)

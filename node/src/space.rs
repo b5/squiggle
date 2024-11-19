@@ -25,6 +25,7 @@ pub mod users;
 pub struct Space {
     pub name: String,
     secret: SpaceSecret,
+    router: RouterClient,
     db: DB,
 }
 
@@ -32,16 +33,26 @@ impl Space {
     pub async fn open(
         name: String,
         secret: SpaceSecret,
+        router: RouterClient,
         repo_base: impl Into<PathBuf>,
     ) -> Result<Self> {
         let path = repo_base.into().join(format!("{}.db", name));
         let db = open_db(&path).await?;
         setup_db(&db).await?;
-        Ok(Space { name, secret, db })
+        Ok(Space {
+            name,
+            secret,
+            router,
+            db,
+        })
     }
 
     pub fn db(&self) -> &DB {
         &self.db
+    }
+
+    pub fn router(&self) -> &RouterClient {
+        &self.router
     }
 
     pub fn users(&self) -> users::Users {
@@ -79,13 +90,13 @@ pub struct Spaces {
 }
 
 impl Spaces {
-    pub async fn open_all(base_path: impl Into<PathBuf>) -> Result<Self> {
+    pub async fn open_all(router: RouterClient, base_path: impl Into<PathBuf>) -> Result<Self> {
         let path = base_path.into();
         println!("open spaces at path {:?}", path);
         let spaces = Self::read_from_file(&path).await?;
         let mut map = HashMap::new();
         for deets in spaces {
-            let space = Space::open(deets.name, deets.secret, path.clone()).await?;
+            let space = Space::open(deets.name, deets.secret, router.clone(), path.clone()).await?;
             println!("opened space {:?}", space);
             map.insert(space.name.clone(), space);
         }
@@ -120,7 +131,8 @@ impl Spaces {
             name: name.to_string(),
             secret: secret.clone(),
         };
-        let space = Space::open(name.to_string(), secret, self.path.clone()).await?;
+        let space =
+            Space::open(name.to_string(), secret, router.clone(), self.path.clone()).await?;
         space_events::SpaceEvents::new(space.clone())
             .create(
                 router,

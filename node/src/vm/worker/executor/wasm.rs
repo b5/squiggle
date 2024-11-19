@@ -171,7 +171,7 @@ host_fn!(schema_load_or_create(ctx: WasmContext; data: String) -> Vec<u8> {
 
     tokio::task::block_in_place(|| {
         ctx.rt.block_on(async move {
-            let schema = schemas.load_or_create(router, author, data.into()).await.context("failed to load or create schema")?;
+            let schema = schemas.load_or_create(author, data.into()).await.context("failed to load or create schema")?;
             serde_json::to_vec(&schema).context("failed to serialize schema")
         })
     })
@@ -188,8 +188,8 @@ host_fn!(event_create(ctx: WasmContext; schema: String, data: String) -> Vec<u8>
 
     tokio::task::block_in_place(|| {
         ctx.rt.block_on(async move {
-            let mut schema = space.schemas().get_by_hash(router, schema_hash).await.context("loading schema")?;
-            let row = schema.create_row(router, &space, author, parsed).await.context("failed to created row")?;
+            let mut schema = space.schemas().get_by_hash(schema_hash).await.context("loading schema")?;
+            let row = schema.create_row(&space, author, parsed).await.context("failed to created row")?;
             serde_json::to_vec(&row).context("failed to serialize event")
         })
     })
@@ -209,7 +209,7 @@ host_fn!(event_mutate(ctx: WasmContext; schema: String, id: String, data: String
     tokio::task::block_in_place(|| {
         ctx.rt.block_on(async move {
             let data = serde_json::from_str::<serde_json::Value>(data.as_str()).map_err(|e| anyhow!("failed to parse data: {}", e))?;
-            let event = rows.mutate(router, author, schema, id, data).await?;
+            let event = rows.mutate(author, schema, id, data).await?;
             let data = serde_json::to_vec(&event).map_err(|e| anyhow!("failed to serialize event: {}", e))?;
             data.to_bytes()
         })
@@ -226,7 +226,7 @@ host_fn!(event_query(ctx: WasmContext; schema: String, query: String) -> Vec<u8>
 
     tokio::task::block_in_place(|| {
         ctx.rt.block_on(async move {
-            let res = rows.query(router, schema, query, 0, -1).await?;
+            let res = rows.query(schema, query, 0, -1).await?;
             let data = serde_json::to_vec(&res).map_err(|e| anyhow!("failed to serialize events: {}", e))?;
             data.to_bytes()
         })

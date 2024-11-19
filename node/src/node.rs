@@ -29,7 +29,7 @@ impl Node {
         let author = iroh::docs::Author::from_bytes(&secret_key.to_bytes());
         router.authors().import(author.clone()).await?;
 
-        let spaces = Spaces::open_all(repo_path.clone()).await?;
+        let spaces = Spaces::open_all(router.client().clone(), repo_path.clone()).await?;
         let vm = VM::create(
             spaces.clone(),
             router.client(),
