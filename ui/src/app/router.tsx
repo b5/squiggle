@@ -31,6 +31,10 @@ const router = createBrowserRouter([
         path: 'programs',
         lazy: () => import('./space/programs'),
       },
+      {
+        path: 'programs/:programId',
+        lazy: () => import('./space/program'),
+      }
     ],
   },
   {

@@ -252,7 +252,6 @@ impl Programs {
 
     pub async fn get_by_id(&self, id: Uuid) -> Result<Program> {
         let conn = self.0.db.lock().await;
-        println!("getting program: {:?}", id);
         let mut stmt = conn
             .prepare(
                 format!(

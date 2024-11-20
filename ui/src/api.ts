@@ -17,7 +17,7 @@ export interface ApiEnvelope<O> {
   data?: O;
 }
 
-function ApiFactory<I, O>(method_name: string): ((i: I) => ApiEnvelope<O>) {
+function ApiQueryFactory<I, O>(method_name: string): ((i: I) => ApiEnvelope<O>) {
   return function(input: I) {
     const [envelope, setEnvelope] = useState<ApiEnvelope<O>>({
       isLoading: true,
@@ -33,14 +33,23 @@ function ApiFactory<I, O>(method_name: string): ((i: I) => ApiEnvelope<O>) {
   }
 }
 
+function ApiMutationFactory<I, O>(method_name: string): (() => (i: I) => Promise<O>) {
+  return () => { 
+    return function(input: I) {
+        return invoke<O>(method_name, input as InvokeArgs)
+    }
+  }
+}
+
 export const useEventSearch = (space: string, query: string, offset: number, limit: number): ApiEnvelope<Event[]> => {
   const [envelope, setEnvelope] = useState<ApiEnvelope<Event[]>>({
     isLoading: true,
   });
 
   useEffect(() => {
-    if (query == "") {
+    if (!query) {
       setEnvelope({ isLoading: false, data: [] });
+      return
     }
 
     invoke("events_search", { space, query, limit, offset }).then((res) => {
@@ -52,10 +61,11 @@ export const useEventSearch = (space: string, query: string, offset: number, lim
   return envelope;
 }
 
-export const useListSpaces = ApiFactory<Pagination, [Space]>("spaces_list");
-export const useQueryUsers = ApiFactory<SpaceParam & Pagination, [User]>("users_list");
-export const useQueryPrograms = ApiFactory<SpaceParam & Pagination, [Program]>("programs_list");
-export const useRunProgram = ApiFactory<SpaceParam & { id: string }, Program>("programs_run");
-export const useQuerySchemas = ApiFactory<SpaceParam & Pagination, [Schema]>("schemas_list");
-export const useQuerySchema = ApiFactory<SpaceParam & { schema: string }, Schema>("schemas_get");
-export const useQueryRows = ApiFactory<SpaceParam & { schema: string } & Pagination, [Row]>("rows_query");
+export const useListSpaces = ApiQueryFactory<Pagination, [Space]>("spaces_list");
+export const useQueryUsers = ApiQueryFactory<SpaceParam & Pagination, [User]>("users_list");
+export const useQueryPrograms = ApiQueryFactory<SpaceParam & Pagination, [Program]>("programs_list");
+export const useQueryProgram = ApiQueryFactory<SpaceParam & { programId: string }, Program>("program_get");
+export const useRunProgramMutation = ApiMutationFactory<SpaceParam & { author: string, programId: string, environment: Record<string,string> }, {}>("program_run");
+export const useQuerySchemas = ApiQueryFactory<SpaceParam & Pagination, [Schema]>("schemas_list");
+export const useQuerySchema = ApiQueryFactory<SpaceParam & { schema: string }, Schema>("schemas_get");
+export const useQueryRows = ApiQueryFactory<SpaceParam & { schema: string } & Pagination, [Row]>("rows_query");

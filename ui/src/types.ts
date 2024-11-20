@@ -7,7 +7,24 @@ export interface User {
 
 }
 
+export interface ProgramManifest {
+  name: string,
+  version: string,
+  description?: string,
+  homepage?: string,
+  repository?: string,
+  license?: string,
+  main?: string,
+}
+
 export interface Program {
+  id: string,
+  createdAt: number,
+  author: string,
+  content: HashLink,
+  manifest: ProgramManifest,
+  html_index?: string,
+  program_entry?: string,
 }
 
 export interface HashLink {
@@ -48,3 +65,16 @@ export interface Event {
   tags: [Tag],
   content: HashLink,
 }
+
+export function schemaId(event: Event): string | undefined {
+  const tag = event.tags.find(([tag]) => tag === SCHEMA_TAG);
+  return tag && tag[1]
+}
+
+export function dataId(event: Event): string | undefined {
+  const tag = event.tags.find(([tag]) => tag === ID_TAG);
+  return tag && tag[1]
+}
+
+const SCHEMA_TAG = "sch";
+const ID_TAG = "id";

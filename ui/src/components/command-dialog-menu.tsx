@@ -20,6 +20,7 @@ import {
   CommandShortcut,
 } from "@/components/ui/command"
 import { useEventSearch } from "@/api"
+import { schemaId } from "@/types"
 import { Loading } from "./ui/loading"
 
 export function CommandDialogMenu() {
@@ -48,15 +49,20 @@ export function CommandDialogMenu() {
     <CommandDialog open={open} onOpenChange={setOpen}>
       <CommandInput placeholder="Type a command or search..." value={query} onValueChange={setQuery} />
       <CommandList>
-        <CommandEmpty>No results found.</CommandEmpty>
-        {(data || isLoading) && <CommandGroup heading="Search Results">
+        {(data || isLoading) && <CommandGroup heading="Search Results" forceMount>
           {isLoading && <Loading />}
-          {data && data.map((event) => (
-            <CommandItem key={event.id} onSelect={() => navigate(`/${space}/tables`)}>
+          {data?.map((event) => {
+            const schId = schemaId(event)
+            return (
+            <CommandItem key={event.id} value={`/${space}/tables/${schId}#${event.id}`} forceMount onSelect={(path) => {
+              console.log(path)
+              navigate(path)
+            }}>
               <span>{event.id}</span>
               <span>{event.createdAt}</span>
             </CommandItem>
-          ))}
+          )})}
+          {(data?.length === 0) && <CommandEmpty>No results found.</CommandEmpty>}
         </CommandGroup>}
         <CommandGroup heading="Suggestions">
           <CommandItem>

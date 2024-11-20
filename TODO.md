@@ -1,4 +1,4 @@
-~~Purpose: Airtable Clone for Laptop-Scale Data~~~
+~~Airtable Clone for Laptop-Scale Data~~~
 
 Sqgl: 
 Squiggle: a free, hackable, local-first version of notion on steriods.
@@ -13,6 +13,49 @@ High Level Requirements:
 * connect facets with others
 * permit access to data with others
 * sync that shared data with others
+
+## Frontend Features
+* [ ] Profiles:
+  * [ ] List
+  * [ ] Create
+  * [ ] Switch
+  * [ ] Edit
+  * [ ] Delete
+* [ ] Spaces:
+  * [ ] Switch
+  * [ ] Create
+  * [ ] Delete
+  * [ ] Edit
+* [ ] Programs
+  * [ ] Program Page
+  * [ ] Run Program from page
+  * [ ] Program start / stop execution feedback
+  * [ ] Program stdout feed
+  * [ ] Drag-Drop Import 
+  * [ ] Create Program Share Ticket
+  * [ ] Fetch from ticket paste in searchbar
+* [ ] Schemas
+  * [ ] File Export: JSON, CSV
+  * [ ] Share via ticket
+  * [ ] Schemas in sidebar
+* [ ] Search:
+  * [ ] Clean up Command Bar
+  * [ ] 
+* [ ] Presence
+  * [ ] User Profile Liveness indicators
+* [ ] Sync
+  * [ ] 
+
+## Backend Features
+* [ ] Write Space Events into Spaces
+* [ ] Capabilities
+  * [ ] Enumerate Capability Systems
+* [ ] Sync
+  * [ ] Mutation Event Broadcast
+
+## Documentation
+* [ ] Outline Design Document
+* [ ] Marketing Page Outline
 
 -- 
 
@@ -29,29 +72,28 @@ High Level Requirements:
   * [ ] program constructor function in repo
     * [x] node CLI command for building programs
   * [x] become browser
-* [ ] Sunday Nov 17
-  * [ ] execute programs from iroh collection source
-  * [ ] List Programs within UI
-  * [ ] Share Program via ticket
-  * [ ] Fetch Program via ticket (in UI)
-  * [ ] Execute program
-  * [ ] Bullet-point overview of system design
 * [ ] Thu Nov 14 - Ticket-Based Share flow
   * [ ] std schemas
   * [ ] Construct Blob of events
   * [ ] Add events from ticket
 * [ ] Fri Nov 15 - Demo for team
   * [ ] inline small amounts of content into events table in JSON format 
-
+* [ ] Sunday Nov 17
+  * [x] execute programs from iroh collection source
+  * [x] List Programs within UI
+  * [x] Share Program via ticket
+  * [ ] Fetch Program via ticket (in UI)
+  * [ ] Execute program
+  * [ ] Bullet-point overview of system design
+* [ ] 
 --
 Initial MVP Flow:
-* [ ] List available bots
-* [ ] Enable bot
+* [ ] List available programs
+* [ ] Run Program
 * [ ] Display Run Status
 * [ ] Review Local Data
 * [ ] Search Local Data
 -- --
-* [ ] Connect with Friends
 * [ ] One-off sharing
 
 -- --
@@ -65,13 +107,13 @@ Initial MVP Flow:
   * [x] interface to write blobs (re-using fog uploads dir)
   * [x] write a task that creates one or more blobs
 * App Detour 1:
-  * [ ] build out project scores database:
+  * [x] build out project scores database:
     * [x] add a single event for every entry
   * [ ] app-side schema viewer
-* [ ] Schemas are JSON Schemas
+* [x] Schemas are JSON Schemas
 * [ ] Events 1
   * [x] Jobs are associated with accounts
-  * [ ] bots schema
+  * [x] bots schema
   * [ ] jobs schema
   * [ ] create event on job run
   * [ ] interface to write events
