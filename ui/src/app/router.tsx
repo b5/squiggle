@@ -8,7 +8,7 @@ const router = createBrowserRouter([
     lazy: () => import('./home'),
   },
   {
-    path: '/:space',
+    path: '/spaces/:space',
     lazy: () => import('./space/layout'),
     children: [
       {
@@ -39,7 +39,7 @@ const router = createBrowserRouter([
   },
   {
     path: '*',
-    element: <h1>Not Found</h1>,
+    lazy: () => import('./home'),
   },
 ])
 

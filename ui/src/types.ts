@@ -32,8 +32,8 @@ export interface HashLink {
   value?: any;
 }
 
-export interface Schema {
-  name: string;
+export interface Table {
+  title: string;
   description: string;
   content: HashLink;
 }

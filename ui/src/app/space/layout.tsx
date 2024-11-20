@@ -1,13 +1,13 @@
 import { Outlet } from "react-router-dom"
 
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
-import { AppSidebar } from "@/components/app-sidebar"
+import { SpaceSidebar } from "@/components/space-sidebar"
 import { CommandDialogMenu } from "@/components/command-dialog-menu"
  
 export function Component() {
   return (
     <SidebarProvider>
-      <AppSidebar />
+      <SpaceSidebar />
       <CommandDialogMenu />
       <main className="w-full h-screen overflow-y-auto">
         <div className="p-4">

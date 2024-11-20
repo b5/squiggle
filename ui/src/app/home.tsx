@@ -16,7 +16,7 @@ export function Component() {
       {data?.map((space, i) => {
         return (
           <div key={i} className="p-2 border-b">
-            <Link to={`/${space.name}`} className="cursor-pointer">{space.name}</Link>
+            <Link to={`/spaces/${space.name}`} className="cursor-pointer">{space.name}</Link>
           </div>
         )
       })}

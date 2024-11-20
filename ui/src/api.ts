@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { invoke, InvokeArgs } from "@tauri-apps/api/core";
 
-import { User, Program, Schema, Row, Space, Event } from "@/types";
+import { User, Program, Table, Row, Space, Event } from "@/types";
 
 export interface SpaceParam {
   space: string;
@@ -66,6 +66,6 @@ export const useQueryUsers = ApiQueryFactory<SpaceParam & Pagination, [User]>("u
 export const useQueryPrograms = ApiQueryFactory<SpaceParam & Pagination, [Program]>("programs_list");
 export const useQueryProgram = ApiQueryFactory<SpaceParam & { programId: string }, Program>("program_get");
 export const useRunProgramMutation = ApiMutationFactory<SpaceParam & { author: string, programId: string, environment: Record<string,string> }, {}>("program_run");
-export const useQueryTables = ApiQueryFactory<SpaceParam & Pagination, [Schema]>("tables_list");
-export const useQueryTable = ApiQueryFactory<SpaceParam & { table: string }, Schema>("table_get");
+export const useQueryTables = ApiQueryFactory<SpaceParam & Pagination, [Table]>("tables_list");
+export const useQueryTable = ApiQueryFactory<SpaceParam & { table: string }, Table>("table_get");
 export const useQueryRows = ApiQueryFactory<SpaceParam & { table: string } & Pagination, [Row]>("rows_query");

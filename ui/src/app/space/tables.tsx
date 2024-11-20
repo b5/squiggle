@@ -21,7 +21,7 @@ export function Component() {
       {data?.map((schema, i) => {
         return (
           <div key={i} className="p-2 border-b">
-            <Link to={`/${space}/tables/${schema.content.hash}`} className="cursor-pointer">{schema.title}</Link>
+            <Link to={`/spaces/${space}/tables/${schema.content.hash}`} className="cursor-pointer">{schema.title}</Link>
           </div>
         )
       })}
