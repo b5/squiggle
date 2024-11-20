@@ -1,12 +1,12 @@
 import { Link, useParams } from "react-router-dom";
 
-import { useQuerySchemas } from "@/api"
+import { useQueryTables } from "@/api"
 import { Loading } from "@/components/ui/loading";
 
 
 export function Component() {
   let { space = "" }  = useParams<{ space: string }>();
-  const { isLoading, data } = useQuerySchemas({ space, offset: 0, limit: 10 });
+  const { isLoading, data } = useQueryTables({ space, offset: 0, limit: 10 });
 
   if (isLoading) {
     return <Loading />

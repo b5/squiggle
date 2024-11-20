@@ -163,7 +163,7 @@ host_fn!(sleep(ctx: WasmContext; ms: u64) -> () {
 host_fn!(schema_load_or_create(ctx: WasmContext; data: String) -> Vec<u8> {
     let ctx = ctx.get()?;
     let ctx = ctx.lock().unwrap();
-    let schemas = ctx.space.schemas();
+    let schemas = ctx.space.tables();
     let author = ctx.author.clone();
 
     tokio::task::block_in_place(|| {
@@ -184,7 +184,7 @@ host_fn!(event_create(ctx: WasmContext; schema: String, data: String) -> Vec<u8>
 
     tokio::task::block_in_place(|| {
         ctx.rt.block_on(async move {
-            let mut schema = space.schemas().get_by_hash(schema_hash).await.context("loading schema")?;
+            let mut schema = space.tables().get_by_hash(schema_hash).await.context("loading schema")?;
             let row = schema.create_row(&space, author, parsed).await.context("failed to created row")?;
             serde_json::to_vec(&row).context("failed to serialize event")
         })

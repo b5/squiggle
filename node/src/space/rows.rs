@@ -106,7 +106,7 @@ impl Rows {
         data: serde_json::Value,
     ) -> Result<Row> {
         self.0
-            .schemas()
+            .tables()
             .get_by_hash(schema_hash)
             .await
             .context("loading schema")?

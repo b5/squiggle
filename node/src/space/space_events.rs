@@ -70,7 +70,7 @@ impl EventObject for SpaceEvent {
         Event::create(
             author,
             self.created_at,
-            EventKind::MutateSchema,
+            EventKind::MutateTable,
             tags,
             self.content.clone(),
         )

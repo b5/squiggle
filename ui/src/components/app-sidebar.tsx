@@ -33,7 +33,7 @@ export function AppSidebar() {
       icon: User,
     },
     {
-      title: "Data",
+      title: "Tables",
       url: `/${space}/tables`,
       icon: HardDrive,
     }

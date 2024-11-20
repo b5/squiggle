@@ -16,12 +16,12 @@ use super::Space;
 use crate::router::RouterClient;
 
 #[derive(Debug, Serialize, Deserialize)]
-struct SchemaMetadata {
+struct TableMetadata {
     title: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct Schema {
+pub struct Table {
     pub id: Uuid,
     #[serde(rename = "createdAt")]
     pub created_at: i64,
@@ -30,9 +30,9 @@ pub struct Schema {
     pub title: String,
 }
 
-impl EventObject for Schema {
+impl EventObject for Table {
     async fn from_event(event: Event, client: &RouterClient) -> Result<Self> {
-        if event.kind != EventKind::MutateSchema {
+        if event.kind != EventKind::MutateTable {
             return Err(anyhow!("event is not a schema mutation"));
         }
 
@@ -45,7 +45,7 @@ impl EventObject for Schema {
             None => {
                 let content = client.blobs().read_to_bytes(event.content.hash).await?;
                 let meta =
-                    serde_json::from_slice::<SchemaMetadata>(&content).map_err(|e| anyhow!(e))?;
+                    serde_json::from_slice::<TableMetadata>(&content).map_err(|e| anyhow!(e))?;
                 let content = serde_json::from_slice::<Value>(&content).map_err(|e| anyhow!(e))?;
                 (
                     HashLink {
@@ -58,12 +58,12 @@ impl EventObject for Schema {
             Some(ref v) => {
                 let data = serde_json::to_vec(v)?;
                 let meta =
-                    serde_json::from_slice::<SchemaMetadata>(&data).map_err(|e| anyhow!(e))?;
+                    serde_json::from_slice::<TableMetadata>(&data).map_err(|e| anyhow!(e))?;
                 (event.content, meta.title)
             }
         };
 
-        Ok(Schema {
+        Ok(Table {
             author: event.pubkey,
             id,
             created_at: event.created_at,
@@ -78,15 +78,15 @@ impl EventObject for Schema {
         Event::create(
             author,
             self.created_at,
-            EventKind::MutateSchema,
+            EventKind::MutateTable,
             tags,
             self.content.clone(),
         )
     }
 }
 
-impl Schema {
-    async fn from_sql_row(row: &rusqlite::Row<'_>, router: &RouterClient) -> Result<Schema> {
+impl Table {
+    async fn from_sql_row(row: &rusqlite::Row<'_>, router: &RouterClient) -> Result<Table> {
         let event = Event::from_sql_row(row)?;
         Self::from_event(event, router).await
     }
@@ -165,15 +165,15 @@ impl Schema {
 }
 
 #[derive(Clone)]
-pub struct Schemas(Space);
+pub struct Tables(Space);
 
-impl Schemas {
+impl Tables {
     pub fn new(repo: Space) -> Self {
-        Schemas(repo)
+        Tables(repo)
     }
 
-    pub async fn load_or_create(&self, author: Author, data: Bytes) -> Result<Schema> {
-        let meta: SchemaMetadata = serde_json::from_slice(&data)?;
+    pub async fn load_or_create(&self, author: Author, data: Bytes) -> Result<Table> {
+        let meta: TableMetadata = serde_json::from_slice(&data)?;
 
         let schema = self.get_by_title(&meta.title).await;
         match schema {
@@ -182,12 +182,12 @@ impl Schemas {
         }
     }
 
-    pub async fn create(&self, author: Author, data: Bytes) -> Result<Schema> {
+    pub async fn create(&self, author: Author, data: Bytes) -> Result<Table> {
         let id = Uuid::new_v4();
         self.mutate(author, id, data).await
     }
 
-    pub async fn mutate(&self, author: Author, id: Uuid, data: Bytes) -> Result<Schema> {
+    pub async fn mutate(&self, author: Author, id: Uuid, data: Bytes) -> Result<Table> {
         // let schema = Schema::new(data.to_string());
         // TODO - should construct a HashSeq, place the new schema as the 1th element
         // and update the metadata in 0th element
@@ -195,7 +195,7 @@ impl Schemas {
         // schema.id()
 
         // extract the title from the schema
-        let meta: SchemaMetadata = serde_json::from_slice(&data)?;
+        let meta: TableMetadata = serde_json::from_slice(&data)?;
 
         // confirm our data is a valid JSON schema
         let schema = serde_json::from_slice(&data)?;
@@ -207,7 +207,7 @@ impl Schemas {
 
         let res = self.0.router.blobs().add_bytes(serialized).await?;
 
-        let schema = Schema {
+        let schema = Table {
             id,
             created_at: chrono::Utc::now().timestamp(),
             title: meta.title,
@@ -225,7 +225,7 @@ impl Schemas {
         Ok(schema)
     }
 
-    pub async fn get_by_title(&self, name: &str) -> Result<Schema> {
+    pub async fn get_by_title(&self, name: &str) -> Result<Table> {
         // TODO - SLOW
         self.list(0, -1)
             .await?
@@ -234,7 +234,7 @@ impl Schemas {
             .ok_or_else(|| anyhow!("schema not found"))
     }
 
-    pub async fn get_by_hash(&self, hash: Hash) -> Result<Schema> {
+    pub async fn get_by_hash(&self, hash: Hash) -> Result<Table> {
         // TODO - SLOW
         let conn = self.0.db.lock().await;
         let mut stmt = conn
@@ -246,15 +246,15 @@ impl Schemas {
             )
             .context("selecting schemas from events table")?;
 
-        let mut rows = stmt.query(params![EventKind::MutateSchema, hash.to_string()])?;
+        let mut rows = stmt.query(params![EventKind::MutateTable, hash.to_string()])?;
         if let Some(row) = rows.next()? {
-            return Schema::from_sql_row(row, &self.0.router).await;
+            return Table::from_sql_row(row, &self.0.router).await;
         }
 
         Err(anyhow!("schema not found"))
     }
 
-    pub async fn list(&self, offset: i64, limit: i64) -> Result<Vec<Schema>> {
+    pub async fn list(&self, offset: i64, limit: i64) -> Result<Vec<Table>> {
         let conn = self.0.db.lock().await;
         let mut stmt = conn
             .prepare(
@@ -264,11 +264,11 @@ impl Schemas {
                 .as_str(),
             )
             .context("selecting schemas from events table")?;
-        let mut rows = stmt.query(rusqlite::params![EventKind::MutateSchema, limit, offset])?;
+        let mut rows = stmt.query(rusqlite::params![EventKind::MutateTable, limit, offset])?;
 
         let mut schemas = Vec::new();
         while let Some(row) = rows.next()? {
-            let schema = Schema::from_sql_row(row, &self.0.router)
+            let schema = Table::from_sql_row(row, &self.0.router)
                 .await
                 .context("parsing schema row")?;
             schemas.push(schema);

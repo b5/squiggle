@@ -5,7 +5,7 @@ use std::sync::Arc;
 use datalayer_node::node::Node;
 use datalayer_node::space::programs::Program;
 use datalayer_node::space::rows::Row;
-use datalayer_node::space::schemas::Schema;
+use datalayer_node::space::tables::Table;
 use datalayer_node::space::users::User;
 use datalayer_node::space::events::Event;
 use datalayer_node::space::SpaceDetails;
@@ -29,7 +29,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .manage(Arc::new(node))
-        .invoke_handler(tauri::generate_handler![spaces_list, events_search, users_list, programs_list, program_run, program_get, schemas_list, schemas_get, rows_query])
+        .invoke_handler(tauri::generate_handler![spaces_list, events_search, users_list, programs_list, program_run, program_get, tables_list, table_get, rows_query])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
@@ -123,36 +123,36 @@ async fn program_run(node: tauri::State<'_, Arc<Node>>, space: &str, _author: &s
 }
 
 #[tauri::command]
-async fn schemas_list(node: tauri::State<'_, Arc<Node>>, space: &str) -> Result<Vec<Schema>, String> {
+async fn tables_list(node: tauri::State<'_, Arc<Node>>, space: &str) -> Result<Vec<Table>, String> {
     let spaces = node.spaces().clone();
     tokio::task::block_in_place(|| {
         tauri::async_runtime::block_on(async move {
             let space = spaces.get(space).await.ok_or("space not found")?;
-            space.schemas().list(0, -1).await.map_err(|e| e.to_string())
+            space.tables().list(0, -1).await.map_err(|e| e.to_string())
         })
     })
 }
 
 #[tauri::command]
-async fn schemas_get(node: tauri::State<'_, Arc<Node>>, space: &str, schema: &str) -> Result<Schema, String> {
+async fn table_get(node: tauri::State<'_, Arc<Node>>, space: &str, table: &str) -> Result<Table, String> {
     let spaces = node.spaces().clone();
-    let schema_hash = Hash::from_str(schema).map_err(|e| e.to_string())?;
+    let table_hash = Hash::from_str(table).map_err(|e| e.to_string())?;
     tokio::task::block_in_place(|| {
         tauri::async_runtime::block_on(async move {
             let space = spaces.get(space).await.ok_or("space not found")?;
-            space.schemas().get_by_hash(schema_hash).await.map_err(|e| e.to_string())
+            space.tables().get_by_hash(table_hash).await.map_err(|e| e.to_string())
         })
     })
 }
 
 #[tauri::command]
-async fn rows_query(node: tauri::State<'_, Arc<Node>>, space: &str, schema: &str, offset: i64, limit: i64) -> Result<Vec<Row>, String> {
+async fn rows_query(node: tauri::State<'_, Arc<Node>>, space: &str, table: &str, offset: i64, limit: i64) -> Result<Vec<Row>, String> {
     let spaces = node.spaces().clone();
-    let schema_hash = Hash::from_str(schema).map_err(|e| e.to_string())?;
+    let table_hash = Hash::from_str(table).map_err(|e| e.to_string())?;
     tokio::task::block_in_place(|| {
         tauri::async_runtime::block_on(async move {
             let space = spaces.get(space).await.ok_or("space not found")?;
-            space.rows().query(schema_hash, String::from(""), offset, limit).await.map_err(|e| e.to_string())
+            space.rows().query(table_hash, String::from(""), offset, limit).await.map_err(|e| e.to_string())
         })
     })
 }

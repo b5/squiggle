@@ -18,8 +18,8 @@ mod db;
 pub mod events;
 pub mod programs;
 pub mod rows;
-pub mod schemas;
 pub mod space_events;
+pub mod tables;
 pub mod tickets;
 pub mod users;
 
@@ -65,8 +65,8 @@ impl Space {
         programs::Programs::new(self.clone())
     }
 
-    pub fn schemas(&self) -> schemas::Schemas {
-        schemas::Schemas::new(self.clone())
+    pub fn tables(&self) -> tables::Tables {
+        tables::Tables::new(self.clone())
     }
 
     pub fn rows(&self) -> rows::Rows {

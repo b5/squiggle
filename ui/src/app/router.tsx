@@ -20,7 +20,7 @@ const router = createBrowserRouter([
         lazy: () => import('./space/tables'),
       },
       {
-        path: 'tables/:schemaHash',
+        path: 'tables/:tableHash',
         lazy: () => import('./space/table')
       },
       {

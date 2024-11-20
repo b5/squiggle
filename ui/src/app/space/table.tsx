@@ -1,7 +1,7 @@
 import { ColumnDef } from "@tanstack/react-table"
 import { useParams } from "react-router-dom"
 
-import { useQueryRows, useQuerySchema } from "@/api";
+import { useQueryRows, useQueryTable } from "@/api";
 import { Loading } from "@/components/ui/loading";
 import { DataTable } from "@/components/data-table";
 import { Badge } from "@/components/ui/badge"
@@ -13,9 +13,9 @@ import { DataTableRowActions } from "@/components/data-table-row-actions"
 
 
 export function Component() {
-  const { space = "", schemaHash = "" }  = useParams<{ space: string, schemaHash: string }>();
-  const schemaEnv = useQuerySchema({ space, schema: schemaHash });
-  const { isLoading, data } = useQueryRows({ space, schema: schemaHash, offset: 0, limit: -1 });
+  const { space = "", tableHash = "" }  = useParams<{ space: string, tableHash: string }>();
+  const schemaEnv = useQueryTable({ space, table: tableHash });
+  const { isLoading, data } = useQueryRows({ space, table: tableHash, offset: 0, limit: -1 });
   
   if (isLoading || schemaEnv.isLoading) {
     return <Loading />

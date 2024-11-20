@@ -77,7 +77,7 @@ High Level Requirements:
   * [ ] Construct Blob of events
   * [ ] Add events from ticket
 * [ ] Fri Nov 15 - Demo for team
-  * [ ] inline small amounts of content into events table in JSON format 
+  * [x] inline content into events table in JSON format 
 * [ ] Sunday Nov 17
   * [x] execute programs from iroh collection source
   * [x] List Programs within UI
@@ -85,7 +85,11 @@ High Level Requirements:
   * [ ] Fetch Program via ticket (in UI)
   * [ ] Execute program
   * [ ] Bullet-point overview of system design
-* [ ] 
+* [ ] Wed Nov 20
+  * [ ] Rename "schemas" to "tables", list tables in sidebar
+  * [ ] Space Switcher, persist choice
+  * [ ] Program configuration
+  * [ ] Program ticket sharing flow
 --
 Initial MVP Flow:
 * [ ] List available programs

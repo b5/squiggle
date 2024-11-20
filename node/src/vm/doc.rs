@@ -1,7 +1,7 @@
-use anyhow::{anyhow, bail, Result};
+use anyhow::{bail, Result};
 use futures::stream::{Stream, StreamExt};
 use iroh::client::docs::Entry;
-use iroh::docs::{DocTicket, NamespaceId};
+use iroh::docs::DocTicket;
 use iroh::net::NodeId;
 use tracing::{trace, warn};
 
@@ -51,16 +51,6 @@ async fn wait_for_sync_finished(doc: &Doc) -> Result<()> {
         }
     }
     bail!("sync finished event not found")
-}
-
-pub async fn open_doc(node: &RouterClient, namespace_id: NamespaceId) -> Result<Doc> {
-    let doc = node
-        .docs()
-        .open(namespace_id)
-        .await?
-        .ok_or_else(|| anyhow!("doc is not found"))?;
-
-    Ok(doc)
 }
 
 async fn configure_doc(doc: &Doc) -> Result<()> {
