@@ -1,5 +1,5 @@
 import { Link, useParams } from "react-router-dom"
-import { Home, Bot, User, HardDrive } from "lucide-react"
+import { Home, User } from "lucide-react"
 
 import {
   Sidebar,
@@ -7,44 +7,55 @@ import {
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
+  SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
-import { useQueryPrograms, useQueryTables } from "@/api";
+import { useQueryListSpaces, useQueryPrograms, useQueryTables } from "@/api";
 import { LoadingSpinner } from "@/components/ui/loading";
+import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Uuid } from "@/types";
 
 
 export function SpaceSidebar() {
-  const { space = "" }  = useParams<{ space: string }>();
-  const { isLoading: isLoadingTables, data: tables } = useQueryTables({ space, offset: 0, limit: 25 });
-  const { isLoading: isLoadingPrograms, data: programs } = useQueryPrograms({ space, offset: 0, limit: 25 });
+  const { spaceId = "" }  = useParams<{ spaceId: Uuid }>();
+  const { isLoading: isLoadingSpaces, data: spaces } = useQueryListSpaces({ offset: 0, limit: 25 });
+  const { isLoading: isLoadingTables, data: tables } = useQueryTables({ spaceId, offset: 0, limit: 25 });
+  const { isLoading: isLoadingPrograms, data: programs } = useQueryPrograms({ spaceId, offset: 0, limit: 25 });
+
 
   const items = [
     {
       title: "Home",
-      url: `/spaces/${space}`,
+      url: `/spaces/${spaceId}`,
       icon: Home,
     },
     {
-      title: "Programs",
-      url: `/spaces/${space}/programs`,
-      icon: Bot
-    },
-    {
       title: "People",
-      url: `/spaces/${space}/people`,
+      url: `/spaces/${spaceId}/people`,
       icon: User,
     },
-    {
-      title: "Tables",
-      url: `/spaces/${space}/tables`,
-      icon: HardDrive,
-    }
   ]
+
+  const space = spaces?.find((space) => space.id === spaceId);
   
   return (
     <Sidebar>
+      <SidebarHeader>
+        <DropdownMenu>
+          <DropdownMenuTrigger>{space?.name}</DropdownMenuTrigger>
+          <DropdownMenuContent>
+            <DropdownMenuLabel>Space</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            {spaces?.map((space) => (
+              <DropdownMenuCheckboxItem checked={(spaceId == space.id)} key={space.id}>
+                {space.name}
+              </DropdownMenuCheckboxItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
           <SidebarGroupLabel>Application</SidebarGroupLabel>
@@ -64,23 +75,23 @@ export function SpaceSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
         <SidebarGroup>
-          <Link to={`/spaces/${space}/programs`}>
+          <Link to={`/spaces/${spaceId}/programs`}>
             <SidebarGroupLabel>Programs</SidebarGroupLabel>
           </Link>
           <SidebarGroupContent>
             <SidebarMenu>
               <SidebarMenuItem>
                 <SidebarMenuButton asChild>
-                  <Link to={`/spaces/${space}/programs`}>
+                  <Link to={`/spaces/${spaceId}/programs`}>
                     <span>Programs</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>
               {isLoadingPrograms && <LoadingSpinner />}
               {programs?.map((program) => (
-                <SidebarMenuItem key={program.content.hash}>
+                <SidebarMenuItem key={program.id}>
                   <SidebarMenuButton asChild>
-                    <Link to={`/spaces/${space}/programs/${program.content.hash}`}>
+                    <Link to={`/spaces/${spaceId}/programs/${program.id}`}>
                       <span>{program.manifest.name}</span>
                     </Link>
                   </SidebarMenuButton>
@@ -90,7 +101,7 @@ export function SpaceSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
         <SidebarGroup>
-          <Link to={`/spaces/${space}/tables`}>
+          <Link to={`/spaces/${spaceId}/tables`}>
             <SidebarGroupLabel>Tables</SidebarGroupLabel>
           </Link>
           <SidebarGroupContent>
@@ -99,7 +110,7 @@ export function SpaceSidebar() {
               {tables?.map((table) => (
                 <SidebarMenuItem key={table.content.hash}>
                   <SidebarMenuButton asChild>
-                    <Link to={`/spaces/${space}/tables/${table.content.hash}`}>
+                    <Link to={`/spaces/${spaceId}/tables/${table.content.hash}`}>
                       <span>{table.title}</span>
                     </Link>
                   </SidebarMenuButton>

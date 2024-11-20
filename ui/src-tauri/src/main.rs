@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    datalayer_lib::run()
+    squiggle_lib::run()
 }

@@ -2,12 +2,12 @@ use std::collections::HashMap;
 
 use anyhow::Result;
 
-use datalayer_node::node::Node;
-use datalayer_node::space::programs::Manifest;
+use squiggle_node::node::Node;
+use squiggle_node::space::programs::Manifest;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let path = datalayer_node::node::data_root()?;
+    let path = squiggle_node::node::data_root()?;
     let node = Node::open(path).await?;
 
     let authors = node.accounts().await?;
@@ -36,7 +36,7 @@ async fn main() -> Result<()> {
 
     // running a flow from a file:
     // let mut flow =
-    //     datalayer_node::vm::flow::Flow::load("../programs/github_repo_stargazers/stargazers.toml")
+    //     squiggle_node::vm::flow::Flow::load("../programs/github_repo_stargazers/stargazers.toml")
     //         .await?;
     // flow.tasks
     //     .iter_mut()

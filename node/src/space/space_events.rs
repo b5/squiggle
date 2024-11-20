@@ -92,19 +92,8 @@ impl SpaceEvents {
         SpaceEvents(space)
     }
 
-    pub async fn create(
-        &self,
-        router: &RouterClient,
-        author: Author,
-        details: SpaceDetails,
-    ) -> Result<SpaceEvent> {
-        let id = Uuid::new_v4();
-        self.mutate(router, author, id, details).await
-    }
-
     pub async fn mutate(
         &self,
-        router: &RouterClient,
         author: Author,
         id: Uuid,
         details: SpaceDetails,
@@ -113,7 +102,7 @@ impl SpaceEvents {
         // TODO - test that this enforces field ordering
         let serialized = serde_json::to_vec(&details)?;
         let v = serde_json::from_slice::<Value>(&serialized)?;
-        let res = router.blobs().add_bytes(serialized).await?;
+        let res = self.0.router.blobs().add_bytes(serialized).await?;
 
         let schema = SpaceEvent {
             id,

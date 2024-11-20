@@ -1,5 +1,8 @@
 
-export interface Space {
+export type Uuid = string;
+
+export interface SpaceDetails {
+  id: Uuid;
   name: string;
 }
 

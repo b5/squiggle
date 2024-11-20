@@ -8,6 +8,7 @@ use iroh::docs::{Author, NamespaceId, NamespaceSecret};
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
+use uuid::Uuid;
 
 use crate::router::RouterClient;
 
@@ -25,6 +26,7 @@ pub mod users;
 
 #[derive(Debug, Clone)]
 pub struct Space {
+    pub id: Uuid,
     pub name: String,
     secret: SpaceSecret,
     router: RouterClient,
@@ -33,6 +35,7 @@ pub struct Space {
 
 impl Space {
     pub async fn open(
+        id: Uuid,
         name: String,
         secret: SpaceSecret,
         router: RouterClient,
@@ -42,6 +45,7 @@ impl Space {
         let db = open_db(&path).await?;
         setup_db(&db).await?;
         Ok(Space {
+            id,
             name,
             secret,
             router,
@@ -55,6 +59,15 @@ impl Space {
 
     pub fn router(&self) -> &RouterClient {
         &self.router
+    }
+
+    pub fn details(&self) -> SpaceDetails {
+        SpaceDetails {
+            id: self.id,
+            name: self.name.clone(),
+            // TODO: nooooooo
+            secret: self.secret.clone(),
+        }
     }
 
     pub fn users(&self) -> users::Users {
@@ -91,8 +104,10 @@ const SPACES_FILENAME: &str = "spaces.json";
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct SpaceDetails {
-    name: String,
-    secret: SpaceSecret,
+    pub id: Uuid,
+    pub name: String,
+    // TODO - this shouldn't be here.
+    pub secret: SpaceSecret,
 }
 
 pub type SpaceSecret = NamespaceSecret;
@@ -101,7 +116,7 @@ pub type SpaceId = NamespaceId;
 #[derive(Debug, Clone)]
 pub struct Spaces {
     path: PathBuf,
-    spaces: Arc<RwLock<HashMap<String, Space>>>,
+    spaces: Arc<RwLock<HashMap<Uuid, Space>>>,
 }
 
 impl Spaces {
@@ -111,8 +126,15 @@ impl Spaces {
         let spaces = Self::read_from_file(&path).await?;
         let mut map = HashMap::new();
         for deets in spaces {
-            let space = Space::open(deets.name, deets.secret, router.clone(), path.clone()).await?;
-            map.insert(space.name.clone(), space);
+            let space = Space::open(
+                deets.id,
+                deets.name,
+                deets.secret,
+                router.clone(),
+                path.clone(),
+            )
+            .await?;
+            map.insert(space.id.clone(), space);
         }
         Ok(Self {
             path,
@@ -127,7 +149,7 @@ impl Spaces {
         name: &str,
         description: &str,
     ) -> Result<Space> {
-        if let Some(space) = self.get(name).await {
+        if let Some(space) = self.get_by_name(name).await {
             return Ok(space);
         }
         self.create(router, author, name, description).await
@@ -140,17 +162,25 @@ impl Spaces {
         name: &str,
         description: &str,
     ) -> Result<Space> {
+        let id = Uuid::new_v4();
         let secret = NamespaceSecret::new(&mut rand::thread_rng());
         let new = SpaceDetails {
+            id,
             name: name.to_string(),
             secret: secret.clone(),
         };
-        let space =
-            Space::open(name.to_string(), secret, router.clone(), self.path.clone()).await?;
+        let space = Space::open(
+            id,
+            name.to_string(),
+            secret,
+            router.clone(),
+            self.path.clone(),
+        )
+        .await?;
         space_events::SpaceEvents::new(space.clone())
-            .create(
-                router,
+            .mutate(
                 author,
+                id,
                 space_events::SpaceDetails {
                     title: name.to_string(),
                     description: description.to_string(),
@@ -158,7 +188,7 @@ impl Spaces {
             )
             .await?;
         let mut spaces = self.spaces.write().await;
-        spaces.insert(name.to_string().clone(), space.clone());
+        spaces.insert(id.clone(), space.clone());
 
         let mut details = Spaces::read_from_file(self.path.join(SPACES_FILENAME)).await?;
         details.push(new);
@@ -167,8 +197,17 @@ impl Spaces {
         Ok(space)
     }
 
-    pub async fn get(&self, name: &str) -> Option<Space> {
-        self.spaces.read().await.get(name).cloned()
+    pub async fn get(&self, id: &Uuid) -> Option<Space> {
+        self.spaces.read().await.get(id).cloned()
+    }
+
+    pub async fn get_by_name(&self, name: &str) -> Option<Space> {
+        self.spaces
+            .read()
+            .await
+            .values()
+            .find(|space| space.name == name)
+            .cloned()
     }
 
     fn spaces_path(path: impl Into<PathBuf>) -> PathBuf {

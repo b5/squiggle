@@ -86,10 +86,13 @@ High Level Requirements:
   * [ ] Execute program
   * [ ] Bullet-point overview of system design
 * [ ] Wed Nov 20
-  * [ ] Rename "schemas" to "tables", list tables in sidebar
-  * [ ] Space Switcher, persist choice
+  * [x] Rename "schemas" to "tables"
+  * [x] list tables in sidebar
+  * [ ] Program page
   * [ ] Program configuration
   * [ ] Program ticket sharing flow
+  * [ ] Space Switcher
+  * [ ] persist space choice
 --
 Initial MVP Flow:
 * [ ] List available programs

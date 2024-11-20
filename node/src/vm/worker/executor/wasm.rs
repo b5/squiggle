@@ -53,7 +53,7 @@ impl Executor for WasmExecutor {
     ) -> Result<Self::Report> {
         let space = self
             .spaces
-            .get(&ctx.space)
+            .get_by_name(&ctx.space)
             .await
             .ok_or_else(|| anyhow!("can't find space: {}", ctx.space))?;
         debug!("executing job: {:?}. context: {:?}", job, ctx.id);

@@ -1,12 +1,8 @@
 import * as React from "react"
 import { useNavigate, useParams } from "react-router-dom"
 import {
-  Calculator,
-  Calendar,
-  CreditCard,
-  Settings,
-  Smile,
-  User,
+  Bot,
+  Table,
 } from "lucide-react"
 
 import {
@@ -16,19 +12,17 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
-  CommandSeparator,
-  CommandShortcut,
 } from "@/components/ui/command"
 import { useEventSearch } from "@/api"
-import { schemaId } from "@/types"
+import { schemaId, Uuid } from "@/types"
 import { Loading } from "./ui/loading"
 
 export function CommandDialogMenu() {
-  const { space = "" } = useParams<{ space: string }>()
+  const { spaceId = "" } = useParams<{ spaceId: Uuid }>()
   const navigate = useNavigate()
   const [open, setOpen] = React.useState(false)
   const [query, setQuery] = React.useState("")
-  const { isLoading, data } = useEventSearch(space, query, 0, 1000);
+  const { isLoading, data } = useEventSearch(spaceId, query, 0, 1000);
 
   React.useEffect(() => {
     const down = (e: KeyboardEvent) => {
@@ -45,6 +39,8 @@ export function CommandDialogMenu() {
     return () => document.removeEventListener("keydown", down)
   }, [])
 
+  const navHandler = (to: string) => () => navigate(to)
+
   return (
     <CommandDialog open={open} onOpenChange={setOpen}>
       <CommandInput placeholder="Type a command or search..." value={query} onValueChange={setQuery} />
@@ -54,7 +50,7 @@ export function CommandDialogMenu() {
           {data?.map((event) => {
             const schId = schemaId(event)
             return (
-            <CommandItem key={event.id} value={`/${space}/tables/${schId}#${event.id}`} forceMount onSelect={(path) => {
+            <CommandItem key={event.id} value={`/spaces/${spaceId}/tables/${schId}#${event.id}`} forceMount onSelect={(path) => {
               console.log(path)
               navigate(path)
             }}>
@@ -64,36 +60,14 @@ export function CommandDialogMenu() {
           )})}
           {(data?.length === 0) && <CommandEmpty>No results found.</CommandEmpty>}
         </CommandGroup>}
-        <CommandGroup heading="Suggestions">
-          <CommandItem>
-            <Calendar />
-            <span>Calendar</span>
+        <CommandGroup heading='Places'>
+          <CommandItem onSelect={navHandler(`/spaces/${spaceId}/programs`)}>
+            <Bot />
+            <span>Programs</span>
           </CommandItem>
-          <CommandItem>
-            <Smile />
-            <span>Search Emoji</span>
-          </CommandItem>
-          <CommandItem>
-            <Calculator />
-            <span>Calculator</span>
-          </CommandItem>
-        </CommandGroup>
-        <CommandSeparator />
-        <CommandGroup heading="Settings">
-          <CommandItem>
-            <User />
-            <span>Profile</span>
-            <CommandShortcut>⌘P</CommandShortcut>
-          </CommandItem>
-          <CommandItem>
-            <CreditCard />
-            <span>Billing</span>
-            <CommandShortcut>⌘B</CommandShortcut>
-          </CommandItem>
-          <CommandItem>
-            <Settings />
-            <span>Settings</span>
-            <CommandShortcut>⌘S</CommandShortcut>
+          <CommandItem onSelect={navHandler(`/spaces/${spaceId}/tables`)}>
+            <Table />
+            <span>Tables</span>
           </CommandItem>
         </CommandGroup>
       </CommandList>

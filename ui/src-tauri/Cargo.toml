@@ -1,7 +1,7 @@
 [package]
-name = "datalayer"
+name = "squiggle"
 version = "0.1.0"
-description = "A Tauri App"
+description = "a hackable airtable for the cozyweb"
 authors = ["you"]
 edition = "2021"
 
@@ -11,14 +11,15 @@ edition = "2021"
 # The `_lib` suffix may seem redundant but it is necessary
 # to make the lib name unique and wouldn't conflict with the bin name.
 # This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
-name = "datalayer_lib"
+name = "squiggle_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-datalayer_node = { path = "../../node" }
+anyhow = "1.0.92"
+squiggle_node = { path = "../../node" }
 tauri = { version = "2.1.1", features = [ "macos-private-api", "unstable"] }
 tauri-plugin-shell = "2"
 serde = { version = "1", features = ["derive"] }

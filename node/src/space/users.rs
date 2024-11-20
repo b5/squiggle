@@ -124,8 +124,8 @@ impl Users {
         Users(repo)
     }
 
-    pub async fn create(&self, router: &RouterClient, profile: Profile) -> Result<User> {
-        User::create(router, &self.0, profile).await
+    pub async fn create(&self, profile: Profile) -> Result<User> {
+        User::create(&self.0.router, &self.0, profile).await
     }
 
     pub async fn mutate(&self, mut user: User) -> Result<User> {
@@ -139,14 +139,14 @@ impl Users {
         Ok(user)
     }
 
-    pub async fn list(&self, router: &RouterClient, offset: i64, limit: i64) -> Result<Vec<User>> {
+    pub async fn list(&self, offset: i64, limit: i64) -> Result<Vec<User>> {
         let conn = self.0.db.lock().await;
         let mut stmt = conn.prepare("SELECT id, pubkey, created_at, kind, schema, data_id, content, sig FROM events WHERE kind = ?1 LIMIT ?2 OFFSET ?3")?;
         let mut rows = stmt.query(params![EventKind::MutateUser, limit, offset])?;
 
         let mut users = Vec::new();
         while let Some(row) = rows.next()? {
-            let user = User::from_sql_row(row, router).await?;
+            let user = User::from_sql_row(row, &self.0.router).await?;
             users.push(user);
         }
 

@@ -10,12 +10,13 @@ import { labels, priorities, statuses } from "@/data/model"
 import { Task } from "@/data/schema"
 import { DataTableColumnHeader } from "@/components/data-table-column-header"
 import { DataTableRowActions } from "@/components/data-table-row-actions"
+import { Uuid } from "@/types";
 
 
 export function Component() {
-  const { space = "", tableHash = "" }  = useParams<{ space: string, tableHash: string }>();
-  const schemaEnv = useQueryTable({ space, table: tableHash });
-  const { isLoading, data } = useQueryRows({ space, table: tableHash, offset: 0, limit: -1 });
+  const { spaceId = "", tableHash = "" }  = useParams<{ spaceId: Uuid, tableHash: string }>();
+  const schemaEnv = useQueryTable({ spaceId, table: tableHash });
+  const { isLoading, data } = useQueryRows({ spaceId, table: tableHash, offset: 0, limit: -1 });
   
   if (isLoading || schemaEnv.isLoading) {
     return <Loading />

@@ -79,11 +79,11 @@ impl Node {
 }
 
 /// Name of directory that wraps all datalayer files in a given application directory
-const DATALAYER_DIR: &str = "datalayer";
+const SQUIGGLE_DATA_DIR: &str = "squiggle";
 
 /// Returns the path to the user's iroh data directory.
 ///
-/// If the `DATALAYER_DATA_DIR` environment variable is set it will be used unconditionally.
+/// If the `SQUIGGLE_DATA_DIR` environment variable is set it will be used unconditionally.
 /// Otherwise the returned value depends on the operating system according to the following
 /// table.
 ///
@@ -93,13 +93,13 @@ const DATALAYER_DIR: &str = "datalayer";
 /// | macOS    | `$HOME`/Library/Application Support/iroh      | /Users/Alice/Library/Application Support/iroh |
 /// | Windows  | `{FOLDERID_RoamingAppData}/iroh`              | C:\Users\Alice\AppData\Roaming\iroh           |
 pub fn data_root() -> Result<PathBuf> {
-    let path = if let Some(val) = env::var_os("DATALAYER_DATA_DIR") {
+    let path = if let Some(val) = env::var_os(SQUIGGLE_DATA_DIR) {
         PathBuf::from(val)
     } else {
         let path = dirs_next::data_dir().ok_or_else(|| {
             anyhow!("operating environment provides no directory for application data")
         })?;
-        path.join(DATALAYER_DIR)
+        path.join(SQUIGGLE_DATA_DIR)
     };
     let path = if !path.is_absolute() {
         std::env::current_dir()?.join(path)

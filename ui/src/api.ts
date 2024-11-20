@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import { invoke, InvokeArgs } from "@tauri-apps/api/core";
 
-import { User, Program, Table, Row, Space, Event } from "@/types";
+import { User, Program, Table, Row, SpaceDetails, Event, Uuid } from "@/types";
 
 export interface SpaceParam {
-  space: string;
+  spaceId: Uuid;
 }
 
 export interface Pagination {
@@ -24,6 +24,7 @@ function ApiQueryFactory<I, O>(method_name: string): ((i: I) => ApiEnvelope<O>) 
     });
 
     useEffect(() => {
+      console.log(method_name, input);
       invoke<O>(method_name, input as InvokeArgs).then((res) => {
         setEnvelope({ isLoading: false, data: res });
       });
@@ -41,7 +42,7 @@ function ApiMutationFactory<I, O>(method_name: string): (() => (i: I) => Promise
   }
 }
 
-export const useEventSearch = (space: string, query: string, offset: number, limit: number): ApiEnvelope<Event[]> => {
+export const useEventSearch = (spaceId: Uuid, query: string, offset: number, limit: number): ApiEnvelope<Event[]> => {
   const [envelope, setEnvelope] = useState<ApiEnvelope<Event[]>>({
     isLoading: true,
   });
@@ -52,16 +53,16 @@ export const useEventSearch = (space: string, query: string, offset: number, lim
       return
     }
 
-    invoke("events_search", { space, query, limit, offset }).then((res) => {
-      console.log(res);
+    invoke("events_search", { spaceId, query, limit, offset }).then((res) => {
       setEnvelope({ isLoading: false, data: res as Event[] });
     });
-  }, [space, query, limit, offset]);
+  }, [spaceId, query, limit, offset]);
 
   return envelope;
 }
 
-export const useListSpaces = ApiQueryFactory<Pagination, [Space]>("spaces_list");
+export const useQuerySpace = ApiQueryFactory<SpaceParam, SpaceDetails>("current_space");
+export const useQueryListSpaces = ApiQueryFactory<Pagination, [SpaceDetails]>("spaces_list");
 export const useQueryUsers = ApiQueryFactory<SpaceParam & Pagination, [User]>("users_list");
 export const useQueryPrograms = ApiQueryFactory<SpaceParam & Pagination, [Program]>("programs_list");
 export const useQueryProgram = ApiQueryFactory<SpaceParam & { programId: string }, Program>("program_get");

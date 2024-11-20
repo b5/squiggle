@@ -1,10 +1,10 @@
 import { Link } from "react-router-dom";
 
-import { useListSpaces } from "@/api"
+import { useQueryListSpaces } from "@/api"
 import { Loading } from "@/components/ui/loading";
 
 export function Component() {
-  const { isLoading, data } = useListSpaces({ offset: 0, limit: -1 }); 
+  const { isLoading, data } = useQueryListSpaces({ offset: 0, limit: -1 }); 
 
   if (isLoading) {
     return <Loading />
@@ -16,7 +16,7 @@ export function Component() {
       {data?.map((space, i) => {
         return (
           <div key={i} className="p-2 border-b">
-            <Link to={`/spaces/${space.name}`} className="cursor-pointer">{space.name}</Link>
+            <Link to={`/spaces/${space.id}`} className="cursor-pointer">{space.name}</Link>
           </div>
         )
       })}

@@ -2,11 +2,12 @@ import { Link, useParams } from "react-router-dom";
 
 import { useQueryTables } from "@/api"
 import { Loading } from "@/components/ui/loading";
+import { Uuid } from "@/types";
 
 
 export function Component() {
-  let { space = "" }  = useParams<{ space: string }>();
-  const { isLoading, data } = useQueryTables({ space, offset: 0, limit: 10 });
+  let { spaceId = "" }  = useParams<{ spaceId: Uuid }>();
+  const { isLoading, data } = useQueryTables({ spaceId, offset: 0, limit: 10 });
 
   if (isLoading) {
     return <Loading />
@@ -21,7 +22,7 @@ export function Component() {
       {data?.map((schema, i) => {
         return (
           <div key={i} className="p-2 border-b">
-            <Link to={`/spaces/${space}/tables/${schema.content.hash}`} className="cursor-pointer">{schema.title}</Link>
+            <Link to={`/spaces/${spaceId}/tables/${schema.content.hash}`} className="cursor-pointer">{schema.title}</Link>
           </div>
         )
       })}
