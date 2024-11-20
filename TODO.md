@@ -88,11 +88,11 @@ High Level Requirements:
 * [ ] Wed Nov 20
   * [x] Rename "schemas" to "tables"
   * [x] list tables in sidebar
+  * [x] Space Switcher
+  * [ ] persist space choice
   * [ ] Program page
   * [ ] Program configuration
   * [ ] Program ticket sharing flow
-  * [ ] Space Switcher
-  * [ ] persist space choice
 --
 Initial MVP Flow:
 * [ ] List available programs
