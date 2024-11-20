@@ -62,9 +62,14 @@ async fn main() -> Result<()> {
     env.insert("repo".to_string(), "awesome-iroh".to_string());
     env.insert("github_token".to_string(), "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".to_string());
 
+    space
+        .secrets()
+        .set_for_program(author.clone(), program.id, env)
+        .await?;
+
     let res = node
         .vm()
-        .run_program(&space, author, program.id, env)
+        .run_program(&space, author, program.id, HashMap::new())
         .await?;
     println!("Flow output: {:?}", res);
     Ok(())

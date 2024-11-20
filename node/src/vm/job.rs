@@ -131,6 +131,8 @@ pub struct JobDescription {
     /// name of the space to run the job in
     /// TODO - this should be the space id
     pub space: String,
+    // UUID of the program we're running
+    pub program_id: Uuid,
     /// Human-readable name of the job
     pub name: String,
     /// the identifier of the user to run the job as.
@@ -321,6 +323,8 @@ pub enum JobOutput {
 pub struct JobContext {
     // space to run the job within
     pub space: String,
+    // program identifier we're running
+    pub program_id: Uuid,
     /// Job id
     pub id: Uuid,
     pub environment: HashMap<String, String>,

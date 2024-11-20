@@ -8,7 +8,7 @@ use uuid::Uuid;
 use crate::router::RouterClient;
 
 use super::events::{Event, EventKind, EventObject, HashLink, Tag, NOSTR_ID_TAG};
-use super::Space;
+use super::{Space, EVENT_SQL_READ_FIELDS};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Profile {
@@ -141,7 +141,12 @@ impl Users {
 
     pub async fn list(&self, offset: i64, limit: i64) -> Result<Vec<User>> {
         let conn = self.0.db.lock().await;
-        let mut stmt = conn.prepare("SELECT id, pubkey, created_at, kind, schema, data_id, content, sig FROM events WHERE kind = ?1 LIMIT ?2 OFFSET ?3")?;
+        let mut stmt = conn.prepare(
+            format!(
+                "SELECT {EVENT_SQL_READ_FIELDS} FROM events WHERE kind = ?1 LIMIT ?2 OFFSET ?3"
+            )
+            .as_str(),
+        )?;
         let mut rows = stmt.query(params![EventKind::MutateUser, limit, offset])?;
 
         let mut users = Vec::new();

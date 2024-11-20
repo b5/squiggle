@@ -178,6 +178,7 @@ impl VM {
                 description: JobDescription {
                     space: space.name.clone(),
                     name: program.manifest.name.clone(),
+                    program_id: program.id,
                     author: author.id().to_string(),
                     environment,
                     details: job::JobDetails::Wasm {

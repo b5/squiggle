@@ -74,11 +74,29 @@ impl Executor for WasmExecutor {
             }
             Source::LocalPath(path) => Wasm::file(downloads_path.join(&path)),
         };
-        let env = ctx.environment.clone().into_iter();
+        let mut environment = ctx.environment.clone();
+
+        let space2 = space.clone();
+        let stored_secrets = tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(async move {
+                let stored_secrets = space2
+                    .secrets()
+                    .for_program_id(ctx.author.clone(), ctx.program_id)
+                    .await?;
+                Ok(stored_secrets)
+            })
+        })?;
+
+        println!("stored secrets: {:?}", stored_secrets);
+        if let Some(secrets) = stored_secrets {
+            for (key, value) in secrets.config {
+                environment.insert(key, value);
+            }
+        }
 
         let manifest = Manifest::new([program])
             .with_allowed_host("*")
-            .with_config(env);
+            .with_config(environment.into_iter());
 
         let wasm_context = UserData::new(WasmContext {
             author: ctx.author.clone(),

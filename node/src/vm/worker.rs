@@ -145,6 +145,7 @@ impl Worker {
             space: scheduled_job.description.space,
             author,
             id: job_id,
+            program_id: scheduled_job.description.program_id.clone(),
             environment: scheduled_job.description.environment.clone(),
             name: scheduled_job.description.name.clone(),
             name_context: JobNameContext {

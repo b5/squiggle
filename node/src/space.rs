@@ -19,6 +19,7 @@ mod db;
 pub mod events;
 pub mod programs;
 pub mod rows;
+pub mod secrets;
 pub mod space_events;
 pub mod tables;
 pub mod tickets;
@@ -76,6 +77,10 @@ impl Space {
 
     pub fn programs(&self) -> programs::Programs {
         programs::Programs::new(self.clone())
+    }
+
+    pub fn secrets(&self) -> secrets::Secrets {
+        secrets::Secrets::new(self.clone())
     }
 
     pub fn tables(&self) -> tables::Tables {
