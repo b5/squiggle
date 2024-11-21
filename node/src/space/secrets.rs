@@ -80,7 +80,7 @@ impl Secrets {
         Secrets(repo)
     }
 
-    pub async fn set_for_program(
+    pub async fn set_for_program_id(
         &self,
         author: Author,
         program_id: Uuid,
@@ -108,11 +108,7 @@ impl Secrets {
         Ok(secret)
     }
 
-    pub async fn for_program_id(
-        &self,
-        _author: Author,
-        program_id: Uuid,
-    ) -> Result<Option<Secret>> {
+    pub async fn for_program_id(&self, program_id: Uuid) -> Result<Option<Secret>> {
         let conn = self.0.db.lock().await;
         let mut stmt = conn.prepare(
             format!("SELECT {EVENT_SQL_READ_FIELDS} FROM events WHERE kind = ?1 AND data_id = ?2 ORDER BY created_at DESC LIMIT 1")

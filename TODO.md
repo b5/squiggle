@@ -90,9 +90,10 @@ High Level Requirements:
   * [x] list tables in sidebar
   * [x] Space Switcher
   * [ ] persist space choice
-  * [ ] Program page
-  * [ ] Program configuration
+  * [x] Program page
+  * [x] Program configuration
   * [ ] Program ticket sharing flow
+  * [ ] Backend Space Sharing
 --
 Initial MVP Flow:
 * [ ] List available programs
@@ -101,7 +102,8 @@ Initial MVP Flow:
 * [ ] Review Local Data
 * [ ] Search Local Data
 -- --
-* [ ] One-off sharing
+* [ ] One-off space sharing
+* [ ] Liveness
 
 -- --
 * [x] Sqlite Events Table

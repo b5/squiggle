@@ -127,7 +127,6 @@ pub struct Spaces {
 impl Spaces {
     pub async fn open_all(router: RouterClient, base_path: impl Into<PathBuf>) -> Result<Self> {
         let path = base_path.into();
-        println!("open spaces at path {:?}", path);
         let spaces = Self::read_from_file(&path).await?;
         let mut map = HashMap::new();
         for deets in spaces {

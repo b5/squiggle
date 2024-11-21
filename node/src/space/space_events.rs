@@ -77,13 +77,6 @@ impl EventObject for SpaceEvent {
     }
 }
 
-impl SpaceEvent {
-    async fn from_sql_row(row: &rusqlite::Row<'_>, client: &RouterClient) -> Result<SpaceEvent> {
-        let event = Event::from_sql_row(row)?;
-        Self::from_event(event, client).await
-    }
-}
-
 #[derive(Clone)]
 pub struct SpaceEvents(Space);
 

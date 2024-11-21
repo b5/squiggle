@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { invoke, InvokeArgs } from "@tauri-apps/api/core";
 
 import { User, Program, Table, Row, SpaceDetails, Event, Uuid } from "@/types";
+import { string } from "zod";
 
 export interface SpaceParam {
   spaceId: Uuid;
@@ -65,8 +66,10 @@ export const useQuerySpace = ApiQueryFactory<SpaceParam, SpaceDetails>("current_
 export const useQueryListSpaces = ApiQueryFactory<Pagination, [SpaceDetails]>("spaces_list");
 export const useQueryUsers = ApiQueryFactory<SpaceParam & Pagination, [User]>("users_list");
 export const useQueryPrograms = ApiQueryFactory<SpaceParam & Pagination, [Program]>("programs_list");
-export const useQueryProgram = ApiQueryFactory<SpaceParam & { programId: string }, Program>("program_get");
-export const useRunProgramMutation = ApiMutationFactory<SpaceParam & { author: string, programId: string, environment: Record<string,string> }, {}>("program_run");
+export const useQueryProgram = ApiQueryFactory<SpaceParam & { programId: Uuid }, Program>("program_get");
+export const useQuerySecrets = ApiQueryFactory<SpaceParam & { programId: Uuid }, Record<string,string>>("secrets_get");
+export const useMutationSetSecrets = ApiMutationFactory<SpaceParam & { programId: Uuid, secrets: Record<string, string> }, {}>("secrets_set");
+export const useMutationRunProgram = ApiMutationFactory<SpaceParam & { author: string, programId: string, environment: Record<string,string> }, {}>("program_run");
 export const useQueryTables = ApiQueryFactory<SpaceParam & Pagination, [Table]>("tables_list");
 export const useQueryTable = ApiQueryFactory<SpaceParam & { table: string }, Table>("table_get");
 export const useQueryRows = ApiQueryFactory<SpaceParam & { table: string } & Pagination, [Row]>("rows_query");

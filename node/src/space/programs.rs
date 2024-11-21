@@ -33,6 +33,19 @@ pub struct Manifest {
     pub repository: Option<String>,
     pub license: Option<String>,
     pub main: Option<String>,
+    pub config: Option<ProgramConfig>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ProgramConfig {
+    environment: Option<Vec<ProgramEnvVar>>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ProgramEnvVar {
+    pub key: String,
+    pub description: String,
+    pub required: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

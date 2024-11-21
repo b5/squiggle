@@ -79,17 +79,14 @@ impl Executor for WasmExecutor {
         let space2 = space.clone();
         let stored_secrets = tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current().block_on(async move {
-                let stored_secrets = space2
-                    .secrets()
-                    .for_program_id(ctx.author.clone(), ctx.program_id)
-                    .await?;
+                let stored_secrets = space2.secrets().for_program_id(ctx.program_id).await?;
                 Ok(stored_secrets)
             })
         })?;
 
-        println!("stored secrets: {:?}", stored_secrets);
         if let Some(secrets) = stored_secrets {
             for (key, value) in secrets.config {
+                println!("using stored secret: {}", &key);
                 environment.insert(key, value);
             }
         }

@@ -23,25 +23,6 @@ async fn main() -> Result<()> {
         .clone()
         .get_or_create(node.router(), author.clone(), "personal", "my first space")
         .await?;
-    // let events = node.repo().list_events().await?;
-    // let b5 = node
-    //     .repo()
-    //     .users()
-    //     .create(
-    //         String::from("b5"),
-    //         String::from("some nerd from canada"),
-    //         String::from(""),
-    //     )
-    //     .await?;
-
-    // running a flow from a file:
-    // let mut flow =
-    //     squiggle_node::vm::flow::Flow::load("../programs/github_repo_stargazers/stargazers.toml")
-    //         .await?;
-    // flow.tasks
-    //     .iter_mut()
-    //     .for_each(|task| task.description.author = authors[0].to_string());
-    // let res = node.vm().run_flow(DEFAULT_WORKSPACE, flow).await?;
 
     // importing a program & running:
     let file = tokio::fs::read("../programs/github_repo_stargazers/dist/program.json").await?;
@@ -64,7 +45,7 @@ async fn main() -> Result<()> {
 
     space
         .secrets()
-        .set_for_program(author.clone(), program.id, env)
+        .set_for_program_id(author.clone(), program.id, env)
         .await?;
 
     let res = node
