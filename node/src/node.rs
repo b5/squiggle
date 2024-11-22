@@ -1,17 +1,18 @@
 use std::env;
 use std::path::PathBuf;
 
-use anyhow::{anyhow, Result};
-use futures::StreamExt;
-use iroh::docs::AuthorId;
+use anyhow::{anyhow, Context, Result};
 use iroh::util::path::IrohPaths;
 use tokio::task::JoinHandle;
 
+use crate::accounts::Accounts;
 use crate::router::Router;
+use crate::space::users::Profile;
 use crate::space::Spaces;
 use crate::vm::{VMConfig, VM};
 
 pub struct Node {
+    accounts: Accounts,
     spaces: Spaces,
     router: Router,
     vm: VM,
@@ -20,16 +21,42 @@ pub struct Node {
 impl Node {
     pub async fn open(path: impl Into<PathBuf>) -> Result<Self> {
         let repo_path = path.into();
-        let router = crate::router::router(&repo_path).await?;
+        let router = crate::router::router(&repo_path)
+            .await
+            .context("spawing iroh router")?;
 
-        // add the node key as an author:
-        // TODO(b5): this is an anti-pattern, remove.
-        let secret_key =
-            iroh::util::fs::load_secret_key(IrohPaths::SecretKey.with_root(&repo_path)).await?;
-        let author = iroh::docs::Author::from_bytes(&secret_key.to_bytes());
-        router.authors().import(author.clone()).await?;
+        let node_id = router
+            .net()
+            .node_id()
+            .await
+            .context("getting iroh nodeID")?;
 
-        let spaces = Spaces::open_all(router.client().clone(), repo_path.clone()).await?;
+        let mut accounts = Accounts::open(&repo_path)
+            .await
+            .context("opening accounts db")?;
+
+        if accounts.list(0, -1).await?.is_empty() {
+            // add the node key as an author:
+            // TODO(b5): this is an anti-pattern, remove.
+            let secret_key =
+                iroh::util::fs::load_secret_key(IrohPaths::SecretKey.with_root(&repo_path)).await?;
+            let author = iroh::docs::Author::from_bytes(&secret_key.to_bytes());
+            router.authors().import(author.clone()).await?;
+
+            let profile = Profile {
+                node_ids: vec![node_id],
+                ..Default::default()
+            };
+
+            accounts
+                .create_account(author, profile)
+                .await
+                .context("creating account")?;
+        }
+
+        let spaces = Spaces::open_all(router.client().clone(), repo_path.clone())
+            .await
+            .context("opening spaces db")?;
         let vm = VM::create(
             spaces.clone(),
             router.client(),
@@ -40,7 +67,16 @@ impl Node {
         )
         .await?;
 
-        Ok(Node { router, spaces, vm })
+        Ok(Node {
+            accounts,
+            router,
+            spaces,
+            vm,
+        })
+    }
+
+    pub fn accounts(&self) -> &Accounts {
+        &self.accounts
     }
 
     pub fn spaces(&self) -> &Spaces {
@@ -53,16 +89,6 @@ impl Node {
 
     pub fn vm(&self) -> &VM {
         &self.vm
-    }
-
-    pub async fn accounts(&self) -> Result<Vec<AuthorId>> {
-        let mut author_ids = self.router.authors().list().await?;
-        let mut authors = Vec::new();
-        while let Some(author_id) = author_ids.next().await {
-            let author_id = author_id?;
-            authors.push(author_id);
-        }
-        Ok(authors)
     }
 
     pub async fn gateway(&self, serve_addr: &str) -> Result<JoinHandle<()>> {

@@ -1,6 +1,8 @@
 use anyhow::{anyhow, Result};
+use iroh::blobs::Hash;
 use iroh::docs::{Author, AuthorId};
 use iroh::net::key::PublicKey;
+use iroh::net::NodeId;
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -10,14 +12,28 @@ use crate::router::RouterClient;
 use super::events::{Event, EventKind, EventObject, HashLink, Tag, NOSTR_ID_TAG};
 use super::{Space, EVENT_SQL_READ_FIELDS};
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct Profile {
-    name: String,
-    description: String,
-    picture: String,
+    pub username: String,
+    pub description: String,
+    pub picture: String,
+    /// set of nodeIDs this user is dialable on
+    pub node_ids: Vec<NodeId>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+impl Profile {
+    pub fn hash_link(&self) -> Result<HashLink> {
+        let bytes = serde_json::to_vec(self)?;
+        let value = serde_json::to_value(self)?;
+
+        Ok(HashLink {
+            hash: Hash::new(bytes),
+            data: Some(value),
+        })
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct User {
     pub id: Uuid,
     pub created_at: i64,
@@ -25,7 +41,7 @@ pub struct User {
     pub content: HashLink,
     pub blankame: String,
     pub author: Option<Author>,
-    pub profile: Option<Profile>,
+    pub profile: Profile,
 }
 
 impl EventObject for User {
@@ -39,26 +55,23 @@ impl EventObject for User {
 
         // fetch content if necessary
         let mut content = event.content.clone();
-        let profile = match content.resolve(router).await {
-            Ok(content) => {
-                let profile: Profile = serde_json::from_value(content)?;
-                Some(profile)
+        let profile = match content.data {
+            Some(ref value) => serde_json::from_value::<Profile>(value.clone())?,
+            None => {
+                let value = content.resolve(router).await?;
+                serde_json::from_value::<Profile>(value)?
             }
-            Err(_) => None,
         };
 
         let author = AuthorId::from(event.pubkey.as_bytes());
-        let author = match router.authors().export(author).await {
-            Ok(author) => author,
-            Err(_) => None,
-        };
+        let author = router.authors().export(author).await.unwrap_or_default();
 
         Ok(User {
             id,
             pubkey: event.pubkey,
             created_at: event.created_at,
             content,
-            blankame: get_blankname(event.pubkey),
+            blankame: get_blankname(&event.pubkey),
             profile,
             author,
         })
@@ -78,42 +91,34 @@ impl EventObject for User {
 }
 
 impl User {
+    pub fn new(author: Author, profile: Profile) -> Result<Self> {
+        // TODO(b5) - wat. why? you're doing something wrong with types.
+        let pubkey = PublicKey::from_bytes(author.public_key().as_bytes())?;
+        let content = profile.hash_link()?;
+
+        Ok(Self {
+            id: Uuid::new_v4(),
+            created_at: chrono::Utc::now().timestamp(),
+            pubkey,
+            content,
+            blankame: get_blankname(&pubkey),
+            author: Some(author),
+            profile,
+        })
+    }
+
     async fn from_sql_row(row: &rusqlite::Row<'_>, client: &RouterClient) -> Result<User> {
         let event = Event::from_sql_row(row)?;
         Self::from_event(event, client).await
     }
 
-    pub async fn create(router: &RouterClient, space: &Space, profile: Profile) -> Result<User> {
-        let id = Uuid::new_v4();
-        let author_id = router.authors().create().await?;
-        let author = router
-            .authors()
-            .export(author_id)
-            .await?
-            .expect("just created author to exist");
-
-        // add profile to store
-        let content = serde_json::to_vec(&profile)?;
-        let result = router.blobs().add_bytes(content).await?;
-
-        // TODO(b5) - wat. why? you're doing something wrong with types.
-        let pubkey = PublicKey::from_bytes(author.public_key().as_bytes())?;
-
-        let user = Self {
-            id,
-            pubkey,
-            created_at: chrono::Utc::now().timestamp(),
-            content: HashLink {
-                hash: result.hash,
-                data: None,
-            },
-            profile: Some(profile),
-            blankame: get_blankname(pubkey),
-            author: Some(author.clone()),
-        };
-
-        user.into_mutate_event(author)?.write(&space.db).await?;
-        Ok(user)
+    pub async fn write(&self, space: &Space) -> Result<()> {
+        let author = self
+            .author
+            .clone()
+            .ok_or_else(|| anyhow!("missing author on user"))?;
+        self.into_mutate_event(author)?.write(&space.db).await?;
+        Ok(())
     }
 }
 
@@ -122,10 +127,6 @@ pub struct Users(Space);
 impl Users {
     pub fn new(repo: Space) -> Self {
         Users(repo)
-    }
-
-    pub async fn create(&self, profile: Profile) -> Result<User> {
-        User::create(&self.0.router, &self.0, profile).await
     }
 
     pub async fn mutate(&self, mut user: User) -> Result<User> {
@@ -160,7 +161,7 @@ impl Users {
 }
 
 // TODO: have this accept a hash & use the hash to deterministically generate a name
-fn get_blankname(key: PublicKey) -> String {
+fn get_blankname(key: &PublicKey) -> String {
     let bytes = key.as_bytes();
     let adjectives = get_adjectives();
     let colors = get_color_names();

@@ -1,3 +1,4 @@
+pub mod accounts;
 mod gateway;
 pub mod node;
 pub(crate) mod router;

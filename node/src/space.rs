@@ -2,12 +2,17 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use events::{Event, EVENT_SQL_READ_FIELDS};
-use iroh::docs::{Author, NamespaceId, NamespaceSecret};
+use iroh::base::ticket::BlobTicket;
+use iroh::blobs::format::collection::Collection;
+use iroh::blobs::Hash;
+use iroh::docs::{NamespaceId, NamespaceSecret};
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
+use space_events::{SpaceEvent, SpaceEvents};
 use tokio::sync::RwLock;
+use users::User;
 use uuid::Uuid;
 
 use crate::router::RouterClient;
@@ -25,8 +30,13 @@ pub mod tables;
 pub mod tickets;
 pub mod users;
 
+// filename for the event data that describes the space when it's in an iroh collection
+const SPACE_COLLECTION_FILENAME: &str = "space.json";
+const SPACE_COLLECTION_DB_FILENAME: &str = "space.db";
+
 #[derive(Debug, Clone)]
 pub struct Space {
+    path: PathBuf,
     pub id: Uuid,
     pub name: String,
     secret: SpaceSecret,
@@ -42,10 +52,11 @@ impl Space {
         router: RouterClient,
         repo_base: impl Into<PathBuf>,
     ) -> Result<Self> {
-        let path = repo_base.into().join(format!("{}.db", name));
-        let db = open_db(&path).await?;
+        let path = repo_base.into();
+        let db = open_db(&path.join(format!("{}.db", name))).await?;
         setup_db(&db).await?;
         Ok(Space {
+            path,
             id,
             name,
             secret,
@@ -103,6 +114,99 @@ impl Space {
         }
         Ok(events)
     }
+
+    pub async fn info(&self) -> Result<SpaceEvent> {
+        SpaceEvents::new(self.clone()).read().await
+    }
+
+    // lol what a bunch of hot garbage
+    // TODO: this doesn't transfer program blobs
+    pub async fn share(&self) -> Result<BlobTicket> {
+        let blobs = self.router.blobs();
+
+        // use the latest space details as the initial hash
+        let info = self.info().await?;
+        let space_data = serde_json::to_vec(&info)?;
+        let res = blobs.add_bytes(space_data).await?;
+
+        // fuck it, send the entire database
+        let db_path = self.path.join(self.db_filename());
+        let add_db_result = blobs
+            .add_from_path(
+                db_path,
+                true,
+                iroh::blobs::util::SetTagOption::Auto,
+                iroh::client::blobs::WrapOption::NoWrap,
+            )
+            .await?
+            .finish()
+            .await?;
+
+        let collection: Collection = vec![
+            (SPACE_COLLECTION_FILENAME, res.hash),
+            (SPACE_COLLECTION_DB_FILENAME, add_db_result.hash),
+        ]
+        .into_iter()
+        .collect();
+
+        let (collection_hash, _) = blobs
+            .create_collection(
+                collection,
+                iroh::blobs::util::SetTagOption::Auto,
+                vec![add_db_result.tag],
+            )
+            .await?;
+
+        let addr = self.router.net().node_addr().await?;
+        let blob_ticket = BlobTicket::new(addr, collection_hash, iroh::blobs::BlobFormat::HashSeq)?;
+
+        Ok(blob_ticket)
+    }
+
+    async fn merge_db(&self, other_sqlite_db_hash: Hash) -> Result<()> {
+        let their_db_path = self.path.join(format!("{}.them.db", self.name));
+        self.router
+            .blobs()
+            .export(
+                other_sqlite_db_hash,
+                their_db_path.clone(),
+                iroh::blobs::store::ExportFormat::Blob,
+                iroh::blobs::store::ExportMode::Copy,
+            )
+            .await?;
+
+        let conn = self.db.lock().await;
+        let mut stmt = conn.prepare("ATTACH DATABASE ?1 AS other")?;
+        stmt.execute(params![their_db_path.to_string_lossy()])?;
+
+        todo!("finish this");
+        // let mut stmt = conn.prepare("SELECT name FROM other.sqlite_master WHERE type='table'")?;
+        // let mut tables: Vec<String> = Vec::new();
+        // let tables = stmt.query_map(params![], |row| row.get(0))?;
+
+        // for table in tables {
+        //     let table = table?;
+        //     let mut stmt = conn.prepare(format!("SELECT * FROM other.{}", table).as_str())?;
+        //     let mut rows = stmt.query(params![])?;
+        //     while let Some(row) = rows.next()? {
+        //         let mut stmt =
+        //             conn.prepare(format!("INSERT INTO {} VALUES (?)", table).as_str())?;
+        //         stmt.execute(params![row])?;
+        //     }
+        // }
+
+        // // drop external database
+        // let mut stmt = conn.prepare("DETACH DATABASE other")?;
+        // stmt.execute(params![])?;
+
+        // tokio::fs::remove_file(their_db_path).await?;
+
+        // Ok(())
+    }
+
+    fn db_filename(&self) -> String {
+        format!("{}.db", self.name)
+    }
 }
 
 const SPACES_FILENAME: &str = "spaces.json";
@@ -111,7 +215,6 @@ const SPACES_FILENAME: &str = "spaces.json";
 pub struct SpaceDetails {
     pub id: Uuid,
     pub name: String,
-    // TODO - this shouldn't be here.
     pub secret: SpaceSecret,
 }
 
@@ -149,24 +252,26 @@ impl Spaces {
     pub async fn get_or_create(
         &mut self,
         router: &RouterClient,
-        author: Author,
+        user: &User,
         name: &str,
         description: &str,
     ) -> Result<Space> {
         if let Some(space) = self.get_by_name(name).await {
             return Ok(space);
         }
-        self.create(router, author, name, description).await
+        self.create(router, user, name, description).await
     }
 
     pub async fn create(
         &mut self,
         router: &RouterClient,
-        author: Author,
+        user: &User,
         name: &str,
         description: &str,
     ) -> Result<Space> {
+        // create the space
         let id = Uuid::new_v4();
+        let author = user.author.clone().expect("author to exist");
         let secret = NamespaceSecret::new(&mut rand::thread_rng());
         let new = SpaceDetails {
             id,
@@ -193,6 +298,9 @@ impl Spaces {
             .await?;
         let mut spaces = self.spaces.write().await;
         spaces.insert(id.clone(), space.clone());
+
+        // write user details into the space
+        user.write(&space).await?;
 
         let mut details = Spaces::read_from_file(self.path.join(SPACES_FILENAME)).await?;
         details.push(new);
@@ -239,18 +347,66 @@ impl Spaces {
         Ok(results)
     }
 
-    // async fn write_all(
-    //     base_path: impl Into<PathBuf>,
-    //     spaces: HashMap<String, Space>,
-    // ) -> Result<()> {
-    //     let path = base_path.into();
-    //     let spaces = spaces
-    //         .into_iter()
-    //         .map(|(name, space)| SpaceDetails {
-    //             name,
-    //             secret: space.secret,
-    //         })
-    //         .collect::<Vec<_>>();
-    //     Spaces::write_to_file(path, spaces).await
-    // }
+    pub async fn add_or_sync_from_collection(
+        &self,
+        router: &RouterClient,
+        ticket: BlobTicket,
+    ) -> Result<Space> {
+        let blobs = router.blobs();
+        blobs
+            .download_hash_seq(ticket.hash(), ticket.node_addr().clone())
+            .await?
+            .finish()
+            .await?;
+
+        let collection = blobs.get_collection(ticket.hash()).await?;
+        let (_, space_element_hash) = collection
+            .clone()
+            .into_iter()
+            .find(|item| item.0 == SPACE_COLLECTION_FILENAME)
+            .ok_or_else(|| anyhow!("space.json not found in collection"))?;
+
+        let (_, db_element_hash) = collection
+            .into_iter()
+            .find(|item| item.0 == SPACE_COLLECTION_DB_FILENAME)
+            .ok_or_else(|| anyhow!("space.db not found in collection"))?;
+
+        let space_data = blobs.read_to_bytes(space_element_hash).await?;
+        let space: SpaceDetails = serde_json::from_slice(&space_data)?;
+        let space = match self.get(&space.id).await {
+            Some(space) => {
+                // we've seen this space before, merge the external database with our existing one
+                space.merge_db(db_element_hash).await?;
+                // TODO - update space details
+                space
+            }
+            None => {
+                // we've never seen this space before, create a new one
+
+                // copy database file to space path name
+                blobs
+                    .export(
+                        db_element_hash,
+                        self.path.join(format!("{}.db", space.name)),
+                        iroh::blobs::store::ExportFormat::Blob,
+                        iroh::blobs::store::ExportMode::Copy,
+                    )
+                    .await?;
+
+                let space = Space::open(
+                    space.id,
+                    space.name,
+                    space.secret,
+                    router.clone(),
+                    self.path.clone(),
+                )
+                .await?;
+                let mut spaces = self.spaces.write().await;
+                spaces.insert(space.id.clone(), space.clone());
+                space
+            }
+        };
+
+        Ok(space)
+    }
 }

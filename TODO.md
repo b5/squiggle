@@ -93,7 +93,12 @@ High Level Requirements:
   * [x] Program page
   * [x] Program configuration
   * [ ] Program ticket sharing flow
-  * [ ] Backend Space Sharing
+* [ ] Thur Nov 21 - Live Program Sync Demo
+  * [ ] Author / Device Mapping
+  * [ ] Join Doc with authors on startup
+  * [ ] Raw Event doc insertion
+  * [ ] Add to table on doc event
+  * [ ] Add content size column to space events schema
 --
 Initial MVP Flow:
 * [ ] List available programs

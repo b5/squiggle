@@ -1,12 +1,13 @@
 use anyhow::{anyhow, Result};
 use iroh::docs::Author;
 use iroh::net::key::PublicKey;
+use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
 
 use super::events::{Event, EventKind, EventObject, HashLink, Tag, NOSTR_ID_TAG};
-use super::Space;
+use super::{Space, EVENT_SQL_READ_FIELDS};
 use crate::router::RouterClient;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -112,5 +113,19 @@ impl SpaceEvents {
         event.write(&self.0.db).await?;
 
         Ok(schema)
+    }
+
+    pub async fn read(&self) -> Result<SpaceEvent> {
+        let conn = self.0.db.lock().await;
+        let mut stmt = conn.prepare(
+            format!("SELECT {EVENT_SQL_READ_FIELDS} FROM events WHERE kind = ?1 ORDER BY created_at DESC LIMIT 1 OFFSET 0").as_str()
+        )?;
+        let mut rows = stmt.query(params![EventKind::MutateSpace])?;
+        if let Some(row) = rows.next()? {
+            let event = Event::from_sql_row(row)?;
+            let event = SpaceEvent::from_event(event, &self.0.router).await?;
+            return Ok(event);
+        }
+        Err(anyhow!("no event found"))
     }
 }
