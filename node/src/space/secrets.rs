@@ -87,6 +87,7 @@ impl Secrets {
         config: SecretsConfig,
     ) -> Result<Secret> {
         let data = serde_json::to_vec(&config)?;
+        let size = data.len();
         let value = serde_json::to_value(&config)?;
         let outcome = self.0.router.blobs().add_bytes(data).await?;
 
@@ -99,6 +100,7 @@ impl Secrets {
             created_at: chrono::Utc::now().timestamp(),
             content: HashLink {
                 hash: outcome.hash,
+                size: Some(size as u64),
                 data: Some(value),
             },
             config,

@@ -44,12 +44,14 @@ impl EventObject for Table {
         let (content, title) = match event.content.data {
             None => {
                 let content = client.blobs().read_to_bytes(event.content.hash).await?;
+                let size = content.len();
                 let meta =
                     serde_json::from_slice::<TableMetadata>(&content).map_err(|e| anyhow!(e))?;
                 let content = serde_json::from_slice::<Value>(&content).map_err(|e| anyhow!(e))?;
                 (
                     HashLink {
                         hash: event.content.hash,
+                        size: Some(size as u64),
                         data: Some(content),
                     },
                     meta.title,
@@ -139,6 +141,7 @@ impl Table {
 
         // add to iroh
         let data2 = serde_json::to_vec(&data)?;
+        let size = data2.len();
         let outcome = router.blobs().add_bytes(data2).await?;
         let created_at = chrono::Utc::now().timestamp();
         let hash = outcome.hash;
@@ -152,6 +155,7 @@ impl Table {
             created_at,
             content: HashLink {
                 hash,
+                size: Some(size as u64),
                 data: Some(data),
             },
         };
@@ -204,7 +208,7 @@ impl Tables {
         // serialize data & add locally
         // TODO - test that this enforces field ordering
         let serialized = serde_json::to_vec(&schema)?;
-
+        let size = serialized.len();
         let res = self.0.router.blobs().add_bytes(serialized).await?;
 
         let schema = Table {
@@ -215,7 +219,8 @@ impl Tables {
             author: PublicKey::from_bytes(author.public_key().as_bytes())?,
             content: HashLink {
                 hash: res.hash,
-                data: None,
+                size: Some(size as u64),
+                data: Some(schema),
             },
         };
 

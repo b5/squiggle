@@ -39,12 +39,14 @@ impl EventObject for SpaceEvent {
         let (content, _title) = match event.content.data {
             None => {
                 let content = client.blobs().read_to_bytes(event.content.hash).await?;
+                let size = content.len();
                 let meta =
                     serde_json::from_slice::<SpaceDetails>(&content).map_err(|e| anyhow!(e))?;
                 let content = serde_json::from_slice::<Value>(&content).map_err(|e| anyhow!(e))?;
                 (
                     HashLink {
                         hash: event.content.hash,
+                        size: Some(size as u64),
                         data: Some(content),
                     },
                     meta.title,
@@ -95,6 +97,7 @@ impl SpaceEvents {
         // serialize data & add locally
         // TODO - test that this enforces field ordering
         let serialized = serde_json::to_vec(&details)?;
+        let size = serialized.len();
         let v = serde_json::from_slice::<Value>(&serialized)?;
         let res = self.0.router.blobs().add_bytes(serialized).await?;
 
@@ -105,6 +108,7 @@ impl SpaceEvents {
             author: PublicKey::from_bytes(author.public_key().as_bytes())?,
             content: HashLink {
                 hash: res.hash,
+                size: Some(size as u64),
                 data: Some(v),
             },
         };

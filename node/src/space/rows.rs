@@ -40,9 +40,11 @@ impl EventObject for Row {
             Some(_) => event.content,
             None => {
                 let content = client.blobs().read_to_bytes(event.content.hash).await?;
+                let size = content.len();
                 let content = serde_json::from_slice::<Value>(&content).map_err(|e| anyhow!(e))?;
                 HashLink {
                     hash: event.content.hash,
+                    size: Some(size as u64),
                     data: Some(content),
                 }
             }

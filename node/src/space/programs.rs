@@ -166,7 +166,7 @@ impl Programs {
         let manifest: Manifest = serde_json::from_slice(data.as_slice())?;
 
         // create collection
-        let (hash, _size, collection) = import(self.0.router.blobs(), path).await?;
+        let (hash, size, collection) = import(self.0.router.blobs(), path).await?;
 
         // build program
         let (html_index, program_entry) = Program::hash_pointers(&manifest, &collection)?;
@@ -176,7 +176,11 @@ impl Programs {
             author: PublicKey::from_bytes(author.public_key().as_bytes())?,
             created_at: chrono::Utc::now().timestamp(),
             manifest,
-            content: HashLink { hash, data: None },
+            content: HashLink {
+                hash,
+                size: Some(size),
+                data: None,
+            },
             html_index,
             program_entry,
         };

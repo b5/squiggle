@@ -24,10 +24,12 @@ pub struct Profile {
 impl Profile {
     pub fn hash_link(&self) -> Result<HashLink> {
         let bytes = serde_json::to_vec(self)?;
+        let size = bytes.len() as u64;
         let value = serde_json::to_value(self)?;
 
         Ok(HashLink {
             hash: Hash::new(bytes),
+            size: Some(size),
             data: Some(value),
         })
     }
