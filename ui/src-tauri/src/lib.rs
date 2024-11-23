@@ -238,21 +238,12 @@ async fn secrets_set(
     let spaces = node.spaces().clone();
     tokio::task::block_in_place(|| {
         tauri::async_runtime::block_on(async move {
-            let author_id = node
+            let user = node
                 .accounts()
+                .current()
                 .await
-                .map_err(|e| e.to_string())?
-                .pop()
-                .ok_or("no author")
-                .map_err(|e| e.to_string())?;
-            let author = node
-                .router()
-                .authors()
-                .export(author_id)
-                .await
-                .map_err(|e| e.to_string())?
-                .ok_or("no author")
-                .map_err(|e| e.to_string())?;
+                .ok_or_else(|| "user not found")?;
+            let author = user.author.ok_or_else(|| "author not found".to_string())?;
 
             let space = spaces.get(&space_id).await.ok_or("space not found")?;
             space
@@ -277,21 +268,12 @@ async fn program_run(
     tokio::task::block_in_place(|| {
         tauri::async_runtime::block_on(async move {
             let space = spaces.get(&space_id).await.ok_or("space not found")?;
-            let author_id = node
+            let user = node
                 .accounts()
+                .current()
                 .await
-                .map_err(|e| e.to_string())?
-                .pop()
-                .ok_or("no author")
-                .map_err(|e| e.to_string())?;
-            let author = node
-                .router()
-                .authors()
-                .export(author_id)
-                .await
-                .map_err(|e| e.to_string())?
-                .ok_or("no author")
-                .map_err(|e| e.to_string())?;
+                .ok_or_else(|| "user not found".to_string())?;
+            let author = user.author.ok_or_else(|| "author not found".to_string())?;
             node.vm()
                 .run_program(&space, author, program_id, environment)
                 .await

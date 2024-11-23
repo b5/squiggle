@@ -120,6 +120,10 @@ impl User {
         self.into_mutate_event(author)?.write(&space.db).await?;
         Ok(())
     }
+
+    pub fn author_id(&self) -> AuthorId {
+        AuthorId::from(self.pubkey.as_bytes())
+    }
 }
 
 pub struct Users(Space);
