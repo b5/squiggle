@@ -10,7 +10,7 @@ use uuid::Uuid;
 use crate::router::RouterClient;
 
 use super::events::{Event, EventKind, EventObject, HashLink, Tag, NOSTR_ID_TAG};
-use super::{Space, EVENT_SQL_READ_FIELDS};
+use super::{Space, DB, EVENT_SQL_READ_FIELDS};
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct Profile {
@@ -164,6 +164,23 @@ impl Users {
 
         Ok(users)
     }
+}
+
+pub async fn all_user_node_ids(db: &DB, router: &RouterClient) -> Result<Vec<NodeId>> {
+    let conn = db.lock().await;
+    let mut stmt = conn.prepare(
+        format!("SELECT {EVENT_SQL_READ_FIELDS} FROM events WHERE kind = ?1 LIMIT ?2 OFFSET ?3")
+            .as_str(),
+    )?;
+    let mut rows = stmt.query(params![EventKind::MutateUser, 0, -1])?;
+
+    let mut node_ids = Vec::new();
+    while let Some(row) = rows.next()? {
+        let mut user = User::from_sql_row(row, router).await?;
+        node_ids.append(&mut user.profile.node_ids);
+    }
+
+    Ok(node_ids)
 }
 
 // TODO: have this accept a hash & use the hash to deterministically generate a name

@@ -5,12 +5,12 @@ use std::sync::Arc;
 use anyhow::{anyhow, Result};
 use events::{Event, EVENT_SQL_READ_FIELDS};
 use iroh::base::ticket::BlobTicket;
-use iroh::blobs::format::collection::Collection;
 use iroh::blobs::Hash;
 use iroh::docs::{NamespaceId, NamespaceSecret};
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use space_events::{SpaceEvent, SpaceEvents};
+use sync::Sync;
 use tokio::sync::RwLock;
 use users::User;
 use uuid::Uuid;
@@ -25,14 +25,12 @@ pub mod events;
 pub mod programs;
 pub mod rows;
 pub mod secrets;
+pub mod sharing;
 pub mod space_events;
+pub mod sync;
 pub mod tables;
 pub mod tickets;
 pub mod users;
-
-// filename for the event data that describes the space when it's in an iroh collection
-const SPACE_COLLECTION_FILENAME: &str = "space.json";
-const SPACE_COLLECTION_DB_FILENAME: &str = "space.db";
 
 #[derive(Debug, Clone)]
 pub struct Space {
@@ -40,8 +38,10 @@ pub struct Space {
     pub id: Uuid,
     pub name: String,
     secret: SpaceSecret,
-    router: RouterClient,
+
     db: DB,
+    router: RouterClient,
+    sync: Option<Sync>,
 }
 
 impl Space {
@@ -55,14 +55,26 @@ impl Space {
         let path = repo_base.into();
         let db = open_db(&path.join(format!("{}.db", name))).await?;
         setup_db(&db).await?;
+
         Ok(Space {
             path,
             id,
             name,
             secret,
             router,
+            sync: None,
             db,
         })
+    }
+
+    pub async fn start_sync(&mut self) -> Result<()> {
+        if self.sync.is_some() {
+            return Err(anyhow!("sync already started"));
+        }
+
+        let sync = Sync::start(&self.db, &self.router, self.secret.id()).await?;
+        self.sync = Some(sync);
+        Ok(())
     }
 
     pub fn db(&self) -> &DB {
@@ -86,6 +98,10 @@ impl Space {
         users::Users::new(self.clone())
     }
 
+    pub fn capabilities(&self) -> capabilities::Capabilities {
+        capabilities::Capabilities::new(self.clone())
+    }
+
     pub fn programs(&self) -> programs::Programs {
         programs::Programs::new(self.clone())
     }
@@ -100,6 +116,12 @@ impl Space {
 
     pub fn rows(&self) -> rows::Rows {
         rows::Rows::new(self.clone())
+    }
+
+    pub async fn share(&self) -> Result<iroh::base::ticket::BlobTicket> {
+        let first = self.users().list(0, 1).await?;
+        let first = first.first().ok_or_else(|| anyhow!("no users"))?;
+        sharing::export_space(self, first).await
     }
 
     pub async fn search(&self, query: &str, offset: i64, limit: i64) -> Result<Vec<Event>> {
@@ -117,50 +139,6 @@ impl Space {
 
     pub async fn info(&self) -> Result<SpaceEvent> {
         SpaceEvents::new(self.clone()).read().await
-    }
-
-    // lol what a bunch of hot garbage
-    // TODO: this doesn't transfer program blobs
-    pub async fn share(&self) -> Result<BlobTicket> {
-        let blobs = self.router.blobs();
-
-        // use the latest space details as the initial hash
-        let info = self.info().await?;
-        let space_data = serde_json::to_vec(&info)?;
-        let res = blobs.add_bytes(space_data).await?;
-
-        // fuck it, send the entire database
-        let db_path = self.path.join(self.db_filename());
-        let add_db_result = blobs
-            .add_from_path(
-                db_path,
-                true,
-                iroh::blobs::util::SetTagOption::Auto,
-                iroh::client::blobs::WrapOption::NoWrap,
-            )
-            .await?
-            .finish()
-            .await?;
-
-        let collection: Collection = vec![
-            (SPACE_COLLECTION_FILENAME, res.hash),
-            (SPACE_COLLECTION_DB_FILENAME, add_db_result.hash),
-        ]
-        .into_iter()
-        .collect();
-
-        let (collection_hash, _) = blobs
-            .create_collection(
-                collection,
-                iroh::blobs::util::SetTagOption::Auto,
-                vec![add_db_result.tag],
-            )
-            .await?;
-
-        let addr = self.router.net().node_addr().await?;
-        let blob_ticket = BlobTicket::new(addr, collection_hash, iroh::blobs::BlobFormat::HashSeq)?;
-
-        Ok(blob_ticket)
     }
 
     async fn merge_db(&self, other_sqlite_db_hash: Hash) -> Result<()> {
@@ -363,12 +341,12 @@ impl Spaces {
         let (_, space_element_hash) = collection
             .clone()
             .into_iter()
-            .find(|item| item.0 == SPACE_COLLECTION_FILENAME)
+            .find(|item| item.0 == crate::space::sharing::SPACE_COLLECTION_FILENAME)
             .ok_or_else(|| anyhow!("space.json not found in collection"))?;
 
         let (_, db_element_hash) = collection
             .into_iter()
-            .find(|item| item.0 == SPACE_COLLECTION_DB_FILENAME)
+            .find(|item| item.0 == crate::space::sharing::SPACE_COLLECTION_DB_FILENAME)
             .ok_or_else(|| anyhow!("space.db not found in collection"))?;
 
         let space_data = blobs.read_to_bytes(space_element_hash).await?;
