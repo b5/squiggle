@@ -91,7 +91,7 @@ impl Sync {
         let mut inner = self.inner.lock().await;
         let bytes = serde_json::to_vec(&event)?;
         let command = Command::BroadcastNeighbors(bytes.into());
-        inner.sink.send(command);
+        inner.sink.send(command).await?;
         Ok(())
     }
 }
