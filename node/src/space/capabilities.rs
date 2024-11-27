@@ -22,6 +22,12 @@ pub struct Capability {
 
 pub struct CapSet(Vec<Capability>);
 
+impl CapSet {
+    pub fn iter(&self) -> impl Iterator<Item = &Capability> {
+        self.0.iter()
+    }
+}
+
 pub struct Capabilities(Space);
 
 impl Capabilities {

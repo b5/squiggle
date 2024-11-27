@@ -50,12 +50,28 @@ impl Sync {
 
         let sink_task = tokio::task::spawn(async move {
             while let Some(event) = stream.next().await {
-                match event {
-                    Ok(event) => {
-                        tracing::info!("gossip: {:?}", event);
-                    }
-                    Err(err) => {
-                        tracing::error!("gossip error: {:?}", err);
+                let event = event
+                    .map_err(|e| tracing::error!("gossip error: {:?}", e))
+                    .ok();
+                if let Some(event) = event {
+                    match event {
+                        iroh::gossip::net::Event::Gossip(event) => match event {
+                            iroh::gossip::net::GossipEvent::NeighborUp(peer) => {
+                                tracing::info!("joined {:?}", peer)
+                            }
+                            iroh::gossip::net::GossipEvent::NeighborDown(peer) => {
+                                tracing::info!("left {:?}", peer)
+                            }
+                            iroh::gossip::net::GossipEvent::Received(message) => {
+                                tracing::info!("message {:?}", message)
+                            }
+                            iroh::gossip::net::GossipEvent::Joined(peers) => {
+                                tracing::info!("joined {:?}", peers)
+                            }
+                        },
+                        iroh::gossip::net::Event::Lagged => {
+                            tracing::warn!("gossip lagged")
+                        }
                     }
                 }
             }
@@ -71,7 +87,7 @@ impl Sync {
         })
     }
 
-    async fn update(&self, event: Event) -> Result<()> {
+    pub async fn broadcast_event_update(&self, event: Event) -> Result<()> {
         let mut inner = self.inner.lock().await;
         let bytes = serde_json::to_vec(&event)?;
         let command = Command::BroadcastNeighbors(bytes.into());

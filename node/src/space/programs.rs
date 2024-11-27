@@ -188,6 +188,9 @@ impl Programs {
         // write event
         let event = program.into_mutate_event(author)?;
         event.write(&self.0.db).await?;
+        if let Some(ref sync) = self.0.sync {
+            sync.broadcast_event_update(event).await?;
+        }
 
         Ok(program)
     }
