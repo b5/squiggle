@@ -1,13 +1,14 @@
 use anyhow::{anyhow, Result};
-use iroh::docs::Author;
-use iroh::net::key::PublicKey;
+use iroh::PublicKey;
+use iroh_docs::Author;
+use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
 
 use super::events::{Event, EventKind, EventObject, HashLink, Tag, NOSTR_ID_TAG};
-use super::Space;
-use crate::router::RouterClient;
+use super::{Space, EVENT_SQL_READ_FIELDS};
+use crate::iroh::Protocols;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SpaceDetails {
@@ -25,7 +26,7 @@ pub struct SpaceEvent {
 }
 
 impl EventObject for SpaceEvent {
-    async fn from_event(event: Event, client: &RouterClient) -> Result<Self> {
+    async fn from_event(event: Event, client: &Protocols) -> Result<Self> {
         if event.kind != EventKind::MutateSpace {
             return Err(anyhow!("event is not a schema mutation"));
         }
@@ -38,12 +39,14 @@ impl EventObject for SpaceEvent {
         let (content, _title) = match event.content.data {
             None => {
                 let content = client.blobs().read_to_bytes(event.content.hash).await?;
+                let size = content.len();
                 let meta =
                     serde_json::from_slice::<SpaceDetails>(&content).map_err(|e| anyhow!(e))?;
                 let content = serde_json::from_slice::<Value>(&content).map_err(|e| anyhow!(e))?;
                 (
                     HashLink {
                         hash: event.content.hash,
+                        size: Some(size as u64),
                         data: Some(content),
                     },
                     meta.title,
@@ -94,6 +97,7 @@ impl SpaceEvents {
         // serialize data & add locally
         // TODO - test that this enforces field ordering
         let serialized = serde_json::to_vec(&details)?;
+        let size = serialized.len();
         let v = serde_json::from_slice::<Value>(&serialized)?;
         let res = self.0.router.blobs().add_bytes(serialized).await?;
 
@@ -104,6 +108,7 @@ impl SpaceEvents {
             author: PublicKey::from_bytes(author.public_key().as_bytes())?,
             content: HashLink {
                 hash: res.hash,
+                size: Some(size as u64),
                 data: Some(v),
             },
         };
@@ -112,5 +117,19 @@ impl SpaceEvents {
         event.write(&self.0.db).await?;
 
         Ok(schema)
+    }
+
+    pub async fn read(&self) -> Result<SpaceEvent> {
+        let conn = self.0.db.lock().await;
+        let mut stmt = conn.prepare(
+            format!("SELECT {EVENT_SQL_READ_FIELDS} FROM events WHERE kind = ?1 ORDER BY created_at DESC LIMIT 1 OFFSET 0").as_str()
+        )?;
+        let mut rows = stmt.query(params![EventKind::MutateSpace])?;
+        if let Some(row) = rows.next()? {
+            let event = Event::from_sql_row(row)?;
+            let event = SpaceEvent::from_event(event, &self.0.router).await?;
+            return Ok(event);
+        }
+        Err(anyhow!("no event found"))
     }
 }

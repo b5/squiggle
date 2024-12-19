@@ -24,6 +24,7 @@ pub(crate) async fn setup_db(db: &DB) -> Result<()> {
             data_id      BLOB NOT NULL,
             sig          BLOB NOT NULL,
             content_hash TEXT NOT NULL,
+            content_size INTEGER NOT NULL,
             content      BLOB
         )",
         [],

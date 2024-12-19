@@ -1,8 +1,8 @@
 use anyhow::{anyhow, Context, Result};
 use bytes::Bytes;
-use iroh::blobs::Hash;
-use iroh::docs::Author;
-use iroh::net::key::PublicKey;
+use iroh::PublicKey;
+use iroh_blobs::Hash;
+use iroh_docs::Author;
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -13,7 +13,7 @@ use super::events::{
 };
 use super::rows::Row;
 use super::Space;
-use crate::router::RouterClient;
+use crate::iroh::Protocols;
 
 #[derive(Debug, Serialize, Deserialize)]
 struct TableMetadata {
@@ -31,7 +31,7 @@ pub struct Table {
 }
 
 impl EventObject for Table {
-    async fn from_event(event: Event, client: &RouterClient) -> Result<Self> {
+    async fn from_event(event: Event, client: &Protocols) -> Result<Self> {
         if event.kind != EventKind::MutateTable {
             return Err(anyhow!("event is not a schema mutation"));
         }
@@ -44,12 +44,14 @@ impl EventObject for Table {
         let (content, title) = match event.content.data {
             None => {
                 let content = client.blobs().read_to_bytes(event.content.hash).await?;
+                let size = content.len();
                 let meta =
                     serde_json::from_slice::<TableMetadata>(&content).map_err(|e| anyhow!(e))?;
                 let content = serde_json::from_slice::<Value>(&content).map_err(|e| anyhow!(e))?;
                 (
                     HashLink {
                         hash: event.content.hash,
+                        size: Some(size as u64),
                         data: Some(content),
                     },
                     meta.title,
@@ -86,12 +88,12 @@ impl EventObject for Table {
 }
 
 impl Table {
-    async fn from_sql_row(row: &rusqlite::Row<'_>, router: &RouterClient) -> Result<Table> {
+    async fn from_sql_row(row: &rusqlite::Row<'_>, router: &Protocols) -> Result<Table> {
         let event = Event::from_sql_row(row)?;
         Self::from_event(event, router).await
     }
 
-    // pub async fn load(router: &RouterClient, hash: Hash) -> Result<Self> {
+    // pub async fn load(router: &Protocols, hash: Hash) -> Result<Self> {
     //     let bytes = router.blobs().read_to_bytes(hash).await?;
     //     let meta: SchemaMetadata = serde_json::from_slice(&bytes)?;
     //     let data = serde_json::from_slice(&bytes)?;
@@ -108,7 +110,7 @@ impl Table {
     //     Ok(res)
     // }
 
-    pub async fn validator(&mut self, router: &RouterClient) -> Result<jsonschema::Validator> {
+    pub async fn validator(&mut self, router: &Protocols) -> Result<jsonschema::Validator> {
         let value = self.content.resolve(router).await?;
         jsonschema::validator_for(&value).context("failed to create validator")
     }
@@ -139,6 +141,7 @@ impl Table {
 
         // add to iroh
         let data2 = serde_json::to_vec(&data)?;
+        let size = data2.len();
         let outcome = router.blobs().add_bytes(data2).await?;
         let created_at = chrono::Utc::now().timestamp();
         let hash = outcome.hash;
@@ -152,6 +155,7 @@ impl Table {
             created_at,
             content: HashLink {
                 hash,
+                size: Some(size as u64),
                 data: Some(data),
             },
         };
@@ -204,7 +208,7 @@ impl Tables {
         // serialize data & add locally
         // TODO - test that this enforces field ordering
         let serialized = serde_json::to_vec(&schema)?;
-
+        let size = serialized.len();
         let res = self.0.router.blobs().add_bytes(serialized).await?;
 
         let schema = Table {
@@ -215,7 +219,8 @@ impl Tables {
             author: PublicKey::from_bytes(author.public_key().as_bytes())?,
             content: HashLink {
                 hash: res.hash,
-                data: None,
+                size: Some(size as u64),
+                data: Some(schema),
             },
         };
 

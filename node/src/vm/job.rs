@@ -5,15 +5,15 @@ use std::{
 
 use anyhow::{bail, Context, Result};
 use bytes::Bytes;
-use iroh::blobs::{util::SetTagOption, Hash};
-use iroh::docs::{Author, AuthorId};
+use iroh_blobs::{util::SetTagOption, Hash};
+use iroh_docs::{Author, AuthorId};
 use serde::{Deserialize, Serialize};
 use tinytemplate::TinyTemplate;
 use tokio::io::AsyncWriteExt;
 use tracing::debug;
 use uuid::Uuid;
 
-use crate::router::RouterClient;
+use crate::iroh::Protocols;
 
 use super::blobs::Blobs;
 
@@ -90,7 +90,7 @@ impl JobStatus {
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
 pub enum Source {
     LocalPath(String),
-    LocalBlob(iroh::blobs::Hash),
+    LocalBlob(iroh_blobs::Hash),
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash)]
@@ -365,7 +365,7 @@ impl JobContext {
         &self,
         path: impl AsRef<Path>,
         blobs: &Blobs,
-        node: &RouterClient,
+        node: &Protocols,
     ) -> Result<()> {
         // Todo: parallelize
 
@@ -406,7 +406,7 @@ impl JobContext {
         &self,
         path: impl AsRef<Path>,
         blobs: &Blobs,
-        node: &RouterClient,
+        node: &Protocols,
     ) -> Result<()> {
         // Todo: parallelize
         let path = path.as_ref();
@@ -529,7 +529,7 @@ mod tests {
                 .unwrap(),
             JobStatus::Scheduling
         );
-        let id = iroh::docs::Author::new(&mut thread_rng()).id();
+        let id = iroh_docs::Author::new(&mut thread_rng()).id();
         assert_eq!(
             JobStatus::Assigned(id)
                 .to_string()

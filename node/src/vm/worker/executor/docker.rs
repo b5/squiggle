@@ -5,7 +5,7 @@ use bollard::container::LogOutput;
 use futures::StreamExt;
 use tracing::{debug, info};
 
-use crate::router::RouterClient;
+use crate::iroh::Protocols;
 use crate::space::Spaces;
 
 use crate::vm::{
@@ -19,7 +19,7 @@ use super::Executor;
 #[derive(Debug, Clone)]
 pub struct Docker {
     // spaces: Spaces,
-    router: RouterClient,
+    router: Protocols,
     docker: bollard::Docker,
     blobs: Blobs,
     /// Root folder to store shared files in
@@ -29,7 +29,7 @@ pub struct Docker {
 impl Docker {
     pub async fn new(
         _spaces: Spaces,
-        router: RouterClient,
+        router: Protocols,
         blobs: Blobs,
         root: PathBuf,
     ) -> Result<Self> {

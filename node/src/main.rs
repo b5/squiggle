@@ -1,27 +1,23 @@
+use anyhow::{Context, Result};
+use squiggle_node::space::programs::Manifest;
 use std::collections::HashMap;
 
-use anyhow::Result;
-
 use squiggle_node::node::Node;
-use squiggle_node::space::programs::Manifest;
+// use squiggle_node::space::programs::Manifest;
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let path = squiggle_node::node::data_root()?;
-    let node = Node::open(path).await?;
+    let node = Node::open(path).await.context("opening node")?;
 
-    let authors = node.accounts().await?;
-    let author = node
-        .router()
-        .authors()
-        .export(authors[0])
-        .await?
-        .expect("author to exist");
+    let accounts = node.accounts().list(0, -1).await?;
+    let user = accounts.first().expect("user to exist");
+    let author = user.author.clone().expect("author to exist");
 
     let space = node
         .spaces()
         .clone()
-        .get_or_create(node.router(), author.clone(), "personal", "my first space")
+        .get_or_create(node.iroh(), user, "personal", "my first space")
         .await?;
 
     // importing a program & running:
@@ -53,5 +49,26 @@ async fn main() -> Result<()> {
         .run_program(&space, author, program.id, HashMap::new())
         .await?;
     println!("Flow output: {:?}", res);
+
+    let ticket = space.share().await?;
+    println!("Space ticket: {}", ticket);
+
+    // let node_clone = node.clone();
+    tokio::spawn(async move {
+        tokio::signal::ctrl_c()
+            .await
+            .expect("failed to listen for event");
+        println!("Ctrl+C received, shutting down.");
+        // node_clone
+        //     .shutdown()
+        //     .await
+        //     .expect("failed to shut down node");
+    });
+
+    tokio::signal::ctrl_c()
+        .await
+        .expect("failed to listen for event");
+    println!("Ctrl+C rec`eived, shutting down.");
+    // node.shutdown().await.expect("failed to shut down node");
     Ok(())
 }

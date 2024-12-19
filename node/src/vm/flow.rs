@@ -6,7 +6,7 @@ use anyhow::{ensure, Result};
 use bytes::Bytes;
 use futures::future::BoxFuture;
 use futures::FutureExt;
-use iroh::blobs::util::SetTagOption;
+use iroh_blobs::util::SetTagOption;
 use serde::{Deserialize, Serialize};
 use tokio::io::BufReader;
 use tokio::task::JoinSet;
@@ -84,7 +84,7 @@ impl Flow {
     pub async fn run(self, vm: &VM) -> Result<FlowOutput> {
         iroh_metrics::inc!(Metrics, flow_run_started);
         let scope = Uuid::new_v4();
-        let router = vm.router.clone();
+        let router = vm.protocols.clone();
 
         // Upload inputs
         for upload in &self.uploads {

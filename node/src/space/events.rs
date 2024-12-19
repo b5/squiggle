@@ -3,9 +3,9 @@ use std::fmt::Write;
 use anyhow::{anyhow, Context, Result};
 use ed25519_dalek::Signature;
 use extism::ToBytes;
-use iroh::blobs::Hash;
-use iroh::docs::Author;
-use iroh::net::key::PublicKey;
+use iroh::PublicKey;
+use iroh_blobs::Hash;
+use iroh_docs::Author;
 use rusqlite::types::{FromSql, ToSqlOutput};
 use rusqlite::{params, ToSql};
 use serde::ser::SerializeStruct;
@@ -16,7 +16,7 @@ use std::fmt;
 use std::str::FromStr;
 use uuid::Uuid;
 
-use crate::router::RouterClient;
+use crate::iroh::Protocols;
 
 use super::db::DB;
 
@@ -25,9 +25,9 @@ pub(crate) const NOSTR_SCHEMA_TAG: &str = "sch";
 pub(crate) const NOSTR_ID_TAG: &str = "id";
 
 pub(crate) const EVENT_SQL_READ_FIELDS: &str =
-    "id, pubkey, created_at, kind, schema_hash, data_id, content_hash, content";
+    "id, pubkey, created_at, kind, schema_hash, data_id, content_hash, content_size, content";
 const EVENT_SQL_WRITE_FIELDS: &str =
-    "id, pubkey, created_at, kind, schema_hash, data_id, content_hash, content, sig";
+    "id, pubkey, created_at, kind, schema_hash, data_id, content_hash, content_size, content, sig";
 
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub enum EventKind {
@@ -212,12 +212,17 @@ impl FromStr for Sha256Digest {
 #[derive(Debug, Clone)]
 pub struct HashLink {
     pub hash: Hash,
+    pub size: Option<u64>,
     pub data: Option<Value>,
 }
 
 impl From<Hash> for HashLink {
     fn from(hash: Hash) -> Self {
-        HashLink { hash, data: None }
+        HashLink {
+            hash,
+            size: None,
+            data: None,
+        }
     }
 }
 
@@ -228,8 +233,9 @@ impl Serialize for HashLink {
     {
         match &self.data {
             Some(value) => {
-                let mut state = serializer.serialize_struct("HashLink", 2)?;
+                let mut state = serializer.serialize_struct("HashLink", 3)?;
                 state.serialize_field("hash", &self.hash.to_string())?;
+                state.serialize_field("size", &self.size)?;
                 state.serialize_field("value", value)?;
                 state.end()
             }
@@ -267,6 +273,7 @@ impl<'de> Deserialize<'de> for HashLink {
                 #[derive(Deserialize)]
                 struct HashLinkStruct {
                     hash: Hash,
+                    size: Option<u64>,
                     value: Option<Value>,
                 }
 
@@ -274,6 +281,7 @@ impl<'de> Deserialize<'de> for HashLink {
                     HashLinkStruct::deserialize(serde::de::value::MapAccessDeserializer::new(map))?;
                 Ok(HashLink {
                     hash: hash_link_struct.hash,
+                    size: hash_link_struct.size,
                     data: hash_link_struct.value,
                 })
             }
@@ -284,11 +292,11 @@ impl<'de> Deserialize<'de> for HashLink {
 }
 
 impl HashLink {
-    pub async fn resolve(&mut self, router: &RouterClient) -> Result<Value> {
+    pub async fn resolve(&mut self, protos: &Protocols) -> Result<Value> {
         match self.data {
             Some(ref v) => Ok(v.clone()),
             None => {
-                let data = router.blobs().read_to_bytes(self.hash).await?;
+                let data = protos.blobs().read_to_bytes(self.hash).await?;
                 let value: Value = serde_json::from_slice(&data)?;
                 self.data = Some(value.clone());
                 Ok(value)
@@ -371,12 +379,8 @@ impl Event {
         Event::from_sql_row(row)
     }
 
-    pub(crate) async fn ingest_from_blob(
-        db: &DB,
-        router: &RouterClient,
-        hash: Hash,
-    ) -> Result<Self> {
-        let data = router.blobs().read_to_bytes(hash).await?;
+    pub(crate) async fn ingest_from_blob(db: &DB, protos: &Protocols, hash: Hash) -> Result<Self> {
+        let data = protos.blobs().read_to_bytes(hash).await?;
         let event: Self = serde_json::from_slice(&data)?;
         event.write(db).await?;
         Ok(event)
@@ -386,10 +390,10 @@ impl Event {
     /// sqlite db. This is for when we want to share events with others.
     pub(crate) async fn write_raw_to_blob(
         &self,
-        router: &RouterClient,
-    ) -> Result<(Hash, iroh::blobs::Tag)> {
+        protos: &Protocols,
+    ) -> Result<(Hash, iroh_blobs::Tag)> {
         let data = serde_json::to_vec(&self)?;
-        let result = router.blobs().add_bytes(data).await?;
+        let result = protos.blobs().add_bytes(data).await?;
         Ok((result.hash, result.tag))
     }
 
@@ -447,7 +451,7 @@ impl Event {
         let conn = db.lock().await;
         conn.execute(
             format!(
-                "INSERT INTO events ({EVENT_SQL_WRITE_FIELDS}) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)"
+                "INSERT INTO events ({EVENT_SQL_WRITE_FIELDS}) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)"
             )
             .as_str(),
             params![
@@ -458,6 +462,7 @@ impl Event {
                 schema,
                 data_id,
                 self.content.hash.to_string(),
+                self.content.size.unwrap_or(0),
                 value,
                 sig,
             ],
@@ -475,12 +480,17 @@ impl Event {
         let data_id: Uuid = row.get(5)?;
 
         let hash = Hash::from_str(&content_hash).map_err(|e| anyhow!(e))?;
-        let value: Option<Vec<u8>> = row.get(7)?;
+        let content_size: u64 = row.get(7)?;
+        let value: Option<Vec<u8>> = row.get(8)?;
         let value = match value {
             Some(v) => Some(serde_json::from_slice(&v)?),
             None => None,
         };
-        let content = HashLink { hash, data: value };
+        let content = HashLink {
+            hash,
+            size: Some(content_size),
+            data: value,
+        };
 
         let mut tags: Vec<Tag> = Vec::new();
         let schema: Option<String> = row.get(4)?;
@@ -503,7 +513,7 @@ impl Event {
 
 // Define the EventObject trait
 pub(crate) trait EventObject {
-    async fn from_event(event: Event, client: &RouterClient) -> Result<Self>
+    async fn from_event(event: Event, client: &Protocols) -> Result<Self>
     where
         Self: Sized;
     fn into_mutate_event(&self, author: Author) -> Result<Event>;

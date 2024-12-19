@@ -1,13 +1,13 @@
 use anyhow::{anyhow, Context, Result};
-use iroh::blobs::Hash;
-use iroh::docs::Author;
-use iroh::net::key::PublicKey;
+use iroh::PublicKey;
+use iroh_blobs::Hash;
+use iroh_docs::Author;
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
 
-use crate::router::RouterClient;
+use crate::iroh::Protocols;
 use crate::space::events::Tag;
 
 use super::events::{
@@ -26,7 +26,7 @@ pub struct Row {
 }
 
 impl EventObject for Row {
-    async fn from_event(event: Event, client: &RouterClient) -> Result<Self> {
+    async fn from_event(event: Event, client: &Protocols) -> Result<Self> {
         if event.kind != EventKind::MutateRow {
             return Err(anyhow!("event is not a row mutation"));
         }
@@ -40,9 +40,11 @@ impl EventObject for Row {
             Some(_) => event.content,
             None => {
                 let content = client.blobs().read_to_bytes(event.content.hash).await?;
+                let size = content.len();
                 let content = serde_json::from_slice::<Value>(&content).map_err(|e| anyhow!(e))?;
                 HashLink {
                     hash: event.content.hash,
+                    size: Some(size as u64),
                     data: Some(content),
                 }
             }
@@ -74,7 +76,7 @@ impl EventObject for Row {
 }
 
 impl Row {
-    async fn from_sql_row(row: &rusqlite::Row<'_>, client: &RouterClient) -> Result<Row> {
+    async fn from_sql_row(row: &rusqlite::Row<'_>, client: &Protocols) -> Result<Row> {
         let event = Event::from_sql_row(row)?;
         Self::from_event(event, client).await
     }

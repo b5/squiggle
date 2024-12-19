@@ -1,8 +1,7 @@
 use std::path::PathBuf;
 
-use iroh::net::defaults::prod::{default_eu_relay_node, default_na_relay_node};
-use iroh::net::relay::RelayNode;
-use iroh::node::GcPolicy;
+use iroh::defaults::prod::{default_eu_relay_node, default_na_relay_node};
+use iroh::RelayNode;
 use serde::{Deserialize, Serialize};
 
 use super::content_routing::AutofetchPolicy;
@@ -23,8 +22,6 @@ pub struct NodeConfig {
     pub iroh_port: u16,
     /// The set of iroh relay nodes to use.
     pub relay_nodes: Vec<RelayNode>,
-    /// How often to garbage collect blobs that have no references.
-    pub gc_policy: GcPolicy,
     /// Address of the tracing collector.
     /// eg: set to http://localhost:4317 for a locally running Jaeger instance.
     pub tracing_endpoint: Option<String>,
@@ -43,7 +40,6 @@ impl Default for NodeConfig {
             metrics_port: Some(8016),
             iroh_port: 0,
             relay_nodes: [default_na_relay_node(), default_eu_relay_node()].into(),
-            gc_policy: GcPolicy::Disabled,
             autofetch_default: AutofetchPolicy::Disabled,
             tracing_endpoint: None,
             worker_root,

@@ -3,12 +3,12 @@ use std::str::FromStr;
 
 use anyhow::{anyhow, Context, Ok, Result};
 use extism::*;
-use iroh::blobs::Hash;
-use iroh::docs::Author;
+use iroh_blobs::Hash;
+use iroh_docs::Author;
 use tracing::debug;
 use uuid::Uuid;
 
-use crate::router::RouterClient;
+use crate::iroh::Protocols;
 use crate::space::{Space, Spaces};
 use crate::vm::blobs::Blobs;
 use crate::vm::job::Source;
@@ -20,7 +20,7 @@ const MAIN_FUNC_NAME: &str = "main";
 #[derive(derive_more::Debug, Clone)]
 pub struct WasmExecutor {
     spaces: Spaces,
-    router: RouterClient,
+    router: Protocols,
     blobs: Blobs,
     /// Root folder to store shared files in
     root: PathBuf,
@@ -29,7 +29,7 @@ pub struct WasmExecutor {
 impl WasmExecutor {
     pub async fn new(
         spaces: Spaces,
-        router: RouterClient,
+        router: Protocols,
         blobs: Blobs,
         root: PathBuf,
     ) -> Result<Self> {

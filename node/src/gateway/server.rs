@@ -14,15 +14,14 @@ use axum::{
 };
 use bytes::Bytes;
 use derive_more::Deref;
-use iroh::{
-    blobs::{
-        format::collection::Collection,
-        get::fsm::{BlobContentNext, ConnectedNext, DecodeError, EndBlobNext},
-        protocol::{RangeSpecSeq, ALPN},
-        store::bao_tree::{io::fsm::BaoContentItem, ChunkNum},
-        Hash,
-    },
-    net::{discovery::dns::DnsDiscovery, Endpoint, NodeAddr},
+use iroh::discovery::dns::DnsDiscovery;
+use iroh::{Endpoint, NodeAddr};
+use iroh_blobs::{
+    format::collection::Collection,
+    get::fsm::{BlobContentNext, ConnectedNext, DecodeError, EndBlobNext},
+    protocol::{RangeSpecSeq, ALPN},
+    store::bao_tree::{io::fsm::BaoContentItem, ChunkNum},
+    Hash,
 };
 use lru::LruCache;
 use mime::Mime;
@@ -117,8 +116,8 @@ async fn get_collection_inner(
     } else {
         RangeSpecSeq::from_ranges(vec![RangeSet2::all(), RangeSet2::all()])
     };
-    let request = iroh::blobs::protocol::GetRequest::new(*hash, spec);
-    let req = iroh::blobs::get::fsm::start(connection.clone(), request);
+    let request = iroh_blobs::protocol::GetRequest::new(*hash, spec);
+    let req = iroh_blobs::get::fsm::start(connection.clone(), request);
     let connected = req.next().await?;
     let ConnectedNext::StartRoot(at_start_root) = connected.next().await? else {
         anyhow::bail!("unexpected response");
@@ -195,8 +194,8 @@ async fn get_mime_type_inner(
 ) -> anyhow::Result<(u64, Mime)> {
     // read 2 KiB.
     let range = RangeSpecSeq::from_ranges(Some(RangeSet2::from(..ChunkNum::chunks(2048))));
-    let request = iroh::blobs::protocol::GetRequest::new(*hash, range);
-    let req = iroh::blobs::get::fsm::start(connection.clone(), request);
+    let request = iroh_blobs::protocol::GetRequest::new(*hash, range);
+    let req = iroh_blobs::get::fsm::start(connection.clone(), request);
     let connected = req.next().await?;
     let ConnectedNext::StartRoot(x) = connected.next().await? else {
         anyhow::bail!("unexpected response");
@@ -402,7 +401,7 @@ async fn forward_range(
     let (_size, mime) = get_mime_type(gateway, hash, name, &connection).await?;
     tracing::debug!("mime: {}", mime);
     let chunk_ranges = RangeSpecSeq::from_ranges(vec![chunk_ranges]);
-    let request = iroh::blobs::protocol::GetRequest::new(*hash, chunk_ranges.clone());
+    let request = iroh_blobs::protocol::GetRequest::new(*hash, chunk_ranges.clone());
     let status_code = if byte_ranges.is_all() {
         StatusCode::OK
     } else {
@@ -412,7 +411,7 @@ async fn forward_range(
     let (send, recv) = flume::bounded::<result::Result<Bytes, DecodeError>>(2);
 
     tracing::trace!("requesting {:?}", request);
-    let req = iroh::blobs::get::fsm::start(connection.clone(), request);
+    let req = iroh_blobs::get::fsm::start(connection.clone(), request);
     let connected = req.next().await?;
     let ConnectedNext::StartRoot(x) = connected.next().await? else {
         anyhow::bail!("unexpected response");

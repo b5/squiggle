@@ -2,14 +2,14 @@ use std::str::FromStr;
 
 use anyhow::{Context, Result};
 use futures::StreamExt;
-use iroh::blobs::Hash;
-use iroh::docs::store::Query;
-use iroh::docs::AuthorId;
-use iroh::net::{AddrInfo, NodeAddr, NodeId};
+use iroh::{NodeAddr, NodeId};
+use iroh_blobs::Hash;
+use iroh_docs::store::Query;
+use iroh_docs::AuthorId;
 use serde::{Deserialize, Serialize};
 use tracing::trace;
 
-use crate::router::RouterClient;
+use crate::iroh::Protocols;
 
 use super::doc::{Doc, Event, EventData, EMPTY_OK_VALUE};
 use super::metrics::Metrics;
@@ -35,7 +35,7 @@ pub(crate) struct ContentRouter {
     author_id: AuthorId,
     node_id: NodeId,
     doc: Doc,
-    node: RouterClient,
+    node: Protocols,
     autofetch: AutofetchPolicy,
 }
 
@@ -44,7 +44,7 @@ impl ContentRouter {
         author_id: AuthorId,
         node_id: NodeId,
         doc: Doc,
-        node: RouterClient,
+        node: Protocols,
         autofetch: AutofetchPolicy,
     ) -> Self {
         Self {
@@ -156,16 +156,13 @@ impl ContentRouter {
     }
 }
 
-async fn fetch_blob_from_provider(node: &RouterClient, hash: Hash, provider: NodeId) -> Result<()> {
+async fn fetch_blob_from_provider(node: &Protocols, hash: Hash, provider: NodeId) -> Result<()> {
     trace!(
         hash = %hash,
         provider = %provider,
         "fetch_blob_from_provider");
 
-    let addr = NodeAddr {
-        node_id: provider,
-        info: AddrInfo::default(),
-    };
+    let addr = NodeAddr::new(provider);
     let outcome = node.blobs().download(hash, addr).await?.await?;
     trace!("Downloaded blob: {:?}", outcome);
     Ok(())

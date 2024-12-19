@@ -3,14 +3,14 @@ use std::str::FromStr;
 use anyhow::{bail, Context, Result};
 use bytes::Bytes;
 use futures::StreamExt;
-use iroh::blobs::Hash;
-use iroh::client::docs::Entry;
-use iroh::docs::AuthorId;
-use iroh::net::NodeId;
+use iroh::NodeId;
+use iroh_blobs::Hash;
+use iroh_docs::rpc::client::docs::Entry;
+use iroh_docs::AuthorId;
 use tracing::{debug, info, trace};
 use uuid::Uuid;
 
-use crate::router::RouterClient;
+use crate::iroh::Protocols;
 
 use super::blobs::Blobs;
 use super::doc::{Doc, DocEventHandler, Event, EventData};
@@ -25,7 +25,7 @@ use super::worker::{ExecutionStatus, WorkerEvent};
 pub struct Scheduler {
     author_id: AuthorId, // author_id must be matched to the node_id doing the scheduling
     blobs: Blobs,
-    node: RouterClient,
+    node: Protocols,
     doc: Doc,
     job_subscriptions: async_broadcast::Sender<(Uuid, JobStatus)>,
     job_r: async_broadcast::InactiveReceiver<(Uuid, JobStatus)>,
@@ -34,12 +34,7 @@ pub struct Scheduler {
 type ScheduledJobRef = (Hash, u64);
 
 impl Scheduler {
-    pub async fn new(
-        author_id: AuthorId,
-        doc: Doc,
-        blobs: Blobs,
-        node: RouterClient,
-    ) -> Result<Self> {
+    pub async fn new(author_id: AuthorId, doc: Doc, blobs: Blobs, node: Protocols) -> Result<Self> {
         let (mut s, r) = async_broadcast::broadcast(128);
         s.set_await_active(false);
 
@@ -256,7 +251,7 @@ impl Scheduler {
     pub async fn get_job(&self, job_id: Uuid) -> Result<Option<(JobStatus, ScheduledJob)>> {
         let job_id = job_id.as_u128();
         let mut status: Option<(JobStatus, Hash)> = None;
-        let q = iroh::docs::store::Query::author(self.author_id)
+        let q = iroh_docs::store::Query::author(self.author_id)
             .key_prefix(format!("{}/status/{}/", JOBS_PREFIX, job_id));
         let mut entries = self.doc.get_many(q).await?;
 

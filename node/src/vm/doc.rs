@@ -1,11 +1,11 @@
 use anyhow::{bail, Result};
 use futures::stream::{Stream, StreamExt};
-use iroh::client::docs::Entry;
-use iroh::docs::DocTicket;
-use iroh::net::NodeId;
+use iroh::NodeId;
+use iroh_docs::DocTicket;
+use iroh_docs::Entry;
 use tracing::{trace, warn};
 
-use crate::router::RouterClient;
+use crate::iroh::Protocols;
 
 use super::blobs::{parse_blobs_event, BlobsEvent, BLOBS_DOC_PREFIX};
 use super::content_routing::{
@@ -15,22 +15,22 @@ use super::job::JOBS_PREFIX;
 use super::scheduler::{parse_scheduler_event, SchedulerEvent};
 use super::worker::{parse_worker_event, WorkerEvent, WORKER_PREFIX};
 
-pub use iroh::client::Doc;
+pub use crate::iroh::Doc;
 
 // A sentinel value for when the value of a key is not important. use it with doc.set_bytes
 // Can't use the empty hash because it stands for deletion
 pub(crate) const EMPTY_OK_VALUE: &[u8] = b"ok";
 
-const DEFAULT_POLICY: iroh::docs::store::DownloadPolicy =
-    iroh::docs::store::DownloadPolicy::NothingExcept(vec![]);
+const DEFAULT_POLICY: iroh_docs::store::DownloadPolicy =
+    iroh_docs::store::DownloadPolicy::NothingExcept(vec![]);
 
-pub async fn create_doc(node: &RouterClient) -> Result<Doc> {
+pub async fn create_doc(node: &Protocols) -> Result<Doc> {
     let doc = node.docs().create().await?;
     configure_doc(&doc).await?;
     Ok(doc)
 }
 
-pub async fn join_doc(node: &RouterClient, ticket: DocTicket) -> Result<Doc> {
+pub async fn join_doc(node: &Protocols, ticket: DocTicket) -> Result<Doc> {
     let doc = node.docs().import(ticket).await?;
     wait_for_sync_finished(&doc).await?;
     configure_doc(&doc).await?;
@@ -43,7 +43,7 @@ async fn wait_for_sync_finished(doc: &Doc) -> Result<()> {
     while let Some(event) = stream.next().await {
         trace!("doc event: {:?}", event);
         let event = event.unwrap();
-        if let iroh::client::docs::LiveEvent::SyncFinished(event) = event {
+        if let iroh_docs::rpc::client::docs::LiveEvent::SyncFinished(event) = event {
             event
                 .result
                 .map_err(|e| anyhow::anyhow!("sync error: {}", e))?;
@@ -90,10 +90,14 @@ pub(crate) async fn subscribe(doc: &Doc, node_id: NodeId) -> Result<impl Stream<
         match event {
             Ok(event) => {
                 let (from, entry) = match event {
-                    iroh::client::docs::LiveEvent::InsertRemote {
-                        ref entry, from, ..
+                    iroh_docs::rpc::client::docs::LiveEvent::InsertRemote {
+                        ref entry,
+                        from,
+                        ..
                     } => (from, entry),
-                    iroh::client::docs::LiveEvent::InsertLocal { ref entry } => (node_id, entry),
+                    iroh_docs::rpc::client::docs::LiveEvent::InsertLocal { ref entry } => {
+                        (node_id, entry)
+                    }
                     _ => return None,
                 };
 
