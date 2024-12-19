@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use anyhow::Result;
 use futures::StreamExt;
@@ -24,10 +25,15 @@ pub(crate) type BlobsClient = iroh_blobs::rpc::client::blobs::Client<
 #[derive(Debug, Clone)]
 pub struct Protocols {
     endpoint: Endpoint,
+    #[allow(dead_code)]
     router: Router,
+    #[allow(dead_code)]
     gossip: Gossip,
     blobs: Blobs<iroh_blobs::store::mem::Store>,
     docs: Docs<iroh_blobs::store::mem::Store>,
+    #[allow(dead_code)]
+    pool: Arc<LocalPool>,
+    #[allow(dead_code)]
     pub(crate) node_id: iroh::NodeId,
 }
 
@@ -68,6 +74,7 @@ impl Protocols {
             node_id,
             gossip,
             blobs,
+            pool: Arc::new(local_pool),
             docs,
         })
     }
