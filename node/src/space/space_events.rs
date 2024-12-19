@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Result};
-use iroh::docs::Author;
-use iroh::net::key::PublicKey;
+use iroh::PublicKey;
+use iroh_docs::Author;
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 use super::events::{Event, EventKind, EventObject, HashLink, Tag, NOSTR_ID_TAG};
 use super::{Space, EVENT_SQL_READ_FIELDS};
-use crate::router::RouterClient;
+use crate::iroh::Protocols;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SpaceDetails {
@@ -26,7 +26,7 @@ pub struct SpaceEvent {
 }
 
 impl EventObject for SpaceEvent {
-    async fn from_event(event: Event, client: &RouterClient) -> Result<Self> {
+    async fn from_event(event: Event, client: &Protocols) -> Result<Self> {
         if event.kind != EventKind::MutateSpace {
             return Err(anyhow!("event is not a schema mutation"));
         }

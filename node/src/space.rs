@@ -4,9 +4,9 @@ use std::sync::Arc;
 
 use anyhow::{anyhow, Result};
 use events::{Event, EVENT_SQL_READ_FIELDS};
-use iroh::base::ticket::BlobTicket;
-use iroh::blobs::Hash;
-use iroh::docs::{NamespaceId, NamespaceSecret};
+use iroh_blobs::ticket::BlobTicket;
+use iroh_blobs::Hash;
+use iroh_docs::{NamespaceId, NamespaceSecret};
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use space_events::{SpaceEvent, SpaceEvents};
@@ -15,7 +15,7 @@ use tokio::sync::RwLock;
 use users::User;
 use uuid::Uuid;
 
-use crate::router::RouterClient;
+use crate::iroh::Protocols;
 
 use self::db::{open_db, setup_db, DB};
 
@@ -40,7 +40,7 @@ pub struct Space {
     secret: SpaceSecret,
 
     db: DB,
-    router: RouterClient,
+    router: Protocols,
     sync: Option<Sync>,
 }
 
@@ -49,7 +49,7 @@ impl Space {
         id: Uuid,
         name: String,
         secret: SpaceSecret,
-        router: RouterClient,
+        router: Protocols,
         repo_base: impl Into<PathBuf>,
     ) -> Result<Self> {
         let path = repo_base.into();
@@ -81,7 +81,7 @@ impl Space {
         &self.db
     }
 
-    pub fn router(&self) -> &RouterClient {
+    pub fn router(&self) -> &Protocols {
         &self.router
     }
 
@@ -118,7 +118,7 @@ impl Space {
         rows::Rows::new(self.clone())
     }
 
-    pub async fn share(&self) -> Result<iroh::base::ticket::BlobTicket> {
+    pub async fn share(&self) -> Result<iroh_blobs::ticket::BlobTicket> {
         let first = self.users().list(0, 1).await?;
         let first = first.first().ok_or_else(|| anyhow!("no users"))?;
         sharing::export_space(self, first).await
@@ -148,8 +148,8 @@ impl Space {
             .export(
                 other_sqlite_db_hash,
                 their_db_path.clone(),
-                iroh::blobs::store::ExportFormat::Blob,
-                iroh::blobs::store::ExportMode::Copy,
+                iroh_blobs::store::ExportFormat::Blob,
+                iroh_blobs::store::ExportMode::Copy,
             )
             .await?;
 
@@ -206,7 +206,7 @@ pub struct Spaces {
 }
 
 impl Spaces {
-    pub async fn open_all(router: RouterClient, base_path: impl Into<PathBuf>) -> Result<Self> {
+    pub async fn open_all(router: Protocols, base_path: impl Into<PathBuf>) -> Result<Self> {
         let path = base_path.into();
         let spaces = Self::read_from_file(&path).await?;
         let mut map = HashMap::new();
@@ -229,7 +229,7 @@ impl Spaces {
 
     pub async fn get_or_create(
         &mut self,
-        router: &RouterClient,
+        router: &Protocols,
         user: &User,
         name: &str,
         description: &str,
@@ -242,7 +242,7 @@ impl Spaces {
 
     pub async fn create(
         &mut self,
-        router: &RouterClient,
+        router: &Protocols,
         user: &User,
         name: &str,
         description: &str,
@@ -327,7 +327,7 @@ impl Spaces {
 
     pub async fn add_or_sync_from_collection(
         &self,
-        router: &RouterClient,
+        router: &Protocols,
         ticket: BlobTicket,
     ) -> Result<Space> {
         let blobs = router.blobs();
@@ -366,8 +366,8 @@ impl Spaces {
                     .export(
                         db_element_hash,
                         self.path.join(format!("{}.db", space.name)),
-                        iroh::blobs::store::ExportFormat::Blob,
-                        iroh::blobs::store::ExportMode::Copy,
+                        iroh_blobs::store::ExportFormat::Blob,
+                        iroh_blobs::store::ExportMode::Copy,
                     )
                     .await?;
 

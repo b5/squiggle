@@ -4,11 +4,9 @@ use std::str::FromStr;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
-use iroh::base::{
-    hash::{BlobFormat, Hash},
-    node_addr::NodeAddr,
-    ticket::{self, Ticket},
-};
+use iroh::NodeAddr;
+use iroh_base::ticket::{self, Ticket};
+use iroh_blobs::{BlobFormat, Hash};
 
 /// A token containing everything to get a file from the provider.
 ///

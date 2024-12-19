@@ -3,7 +3,7 @@ use std::path::Path;
 use anyhow::{bail, Result};
 use tracing::{debug, warn};
 
-use crate::router::RouterClient;
+use crate::iroh::Protocols;
 use crate::space::Spaces;
 use crate::vm::blobs::Blobs;
 use crate::vm::job::{JobContext, JobType};
@@ -32,7 +32,7 @@ pub struct Executors {
 impl Executors {
     pub async fn new(
         spaces: Spaces,
-        router: RouterClient,
+        router: Protocols,
         blobs: Blobs,
         root: impl AsRef<Path>,
     ) -> Result<Self> {

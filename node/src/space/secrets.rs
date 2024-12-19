@@ -1,13 +1,13 @@
 use std::collections::HashMap;
 
 use anyhow::{anyhow, Result};
-use iroh::docs::Author;
-use iroh::net::key::PublicKey;
+use iroh::PublicKey;
+use iroh_docs::Author;
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::router::RouterClient;
+use crate::iroh::Protocols;
 
 use super::events::{Event, EventKind, EventObject, HashLink, Tag, NOSTR_ID_TAG};
 use super::{Space, EVENT_SQL_READ_FIELDS};
@@ -24,7 +24,7 @@ pub struct Secret {
 }
 
 impl EventObject for Secret {
-    async fn from_event(event: Event, _router: &RouterClient) -> Result<Self> {
+    async fn from_event(event: Event, _router: &Protocols) -> Result<Self> {
         if event.kind != EventKind::MutateSecret {
             return Err(anyhow!("event is not a user mutation"));
         }
@@ -67,7 +67,7 @@ impl EventObject for Secret {
 }
 
 impl Secret {
-    async fn from_sql_row(row: &rusqlite::Row<'_>, client: &RouterClient) -> Result<Secret> {
+    async fn from_sql_row(row: &rusqlite::Row<'_>, client: &Protocols) -> Result<Secret> {
         let event = Event::from_sql_row(row)?;
         Self::from_event(event, client).await
     }

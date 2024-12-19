@@ -1,8 +1,8 @@
 pub mod accounts;
 mod gateway;
+pub(crate) mod iroh;
 pub mod node;
-pub(crate) mod router;
 pub mod space;
 pub mod vm;
 
-pub use iroh::blobs::Hash;
+pub use iroh_blobs::Hash;

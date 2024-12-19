@@ -17,7 +17,7 @@ async fn main() -> Result<()> {
     let space = node
         .spaces()
         .clone()
-        .get_or_create(node.router(), user, "personal", "my first space")
+        .get_or_create(node.iroh(), user, "personal", "my first space")
         .await?;
 
     // importing a program & running:

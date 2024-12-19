@@ -1,7 +1,7 @@
 use anyhow::Result;
-use iroh::base::ticket::BlobTicket;
-use iroh::blobs::format::collection::Collection;
-use iroh::client::blobs::AddOutcome;
+use iroh_blobs::format::collection::Collection;
+use iroh_blobs::rpc::client::blobs::AddOutcome;
+use iroh_blobs::ticket::BlobTicket;
 
 use super::capabilities::CapSet;
 use super::users::User;
@@ -40,13 +40,13 @@ pub async fn export_space_with_capabilities(
     let (collection_hash, _) = blobs
         .create_collection(
             collection,
-            iroh::blobs::util::SetTagOption::Auto,
+            iroh_blobs::util::SetTagOption::Auto,
             vec![add_db_result.tag],
         )
         .await?;
 
-    let addr = space.router().net().node_addr().await?;
-    let blob_ticket = BlobTicket::new(addr, collection_hash, iroh::blobs::BlobFormat::HashSeq)?;
+    let addr = space.router().endpoint().node_addr().await?;
+    let blob_ticket = BlobTicket::new(addr, collection_hash, iroh_blobs::BlobFormat::HashSeq)?;
 
     Ok(blob_ticket)
 }
@@ -63,8 +63,8 @@ async fn events_for_cap_set(space: &Space, _caps: CapSet) -> Result<AddOutcome> 
         .add_from_path(
             db_path,
             true,
-            iroh::blobs::util::SetTagOption::Auto,
-            iroh::client::blobs::WrapOption::NoWrap,
+            iroh_blobs::util::SetTagOption::Auto,
+            iroh_blobs::rpc::client::blobs::WrapOption::NoWrap,
         )
         .await?
         .finish()

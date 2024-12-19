@@ -1,15 +1,15 @@
 use anyhow::{anyhow, Result};
 use bytes::Bytes;
 use futures::TryStreamExt;
-use iroh::blobs::Hash;
-use iroh::client::docs::Entry;
-use iroh::docs::store::Query;
-use iroh::docs::AuthorId;
-use iroh::net::NodeId;
+use iroh::NodeId;
+use iroh_blobs::Hash;
+use iroh_docs::rpc::client::docs::Entry;
+use iroh_docs::store::Query;
+use iroh_docs::AuthorId;
 
 use tracing::{debug, warn};
 
-use crate::router::RouterClient;
+use crate::iroh::Protocols;
 
 use super::content_routing::{AutofetchPolicy, ContentRouter};
 use super::doc::{Doc, Event, EventData};
@@ -21,14 +21,14 @@ pub(crate) const BLOBS_DOC_PREFIX: &str = "blobs";
 pub struct Blobs {
     // nodeID doubles as the author ID for this replica when writing to the doc
     node_id: NodeId,
-    node: RouterClient,
+    node: Protocols,
     doc: Doc,
     content_router: ContentRouter,
 }
 
 impl Blobs {
-    pub fn new(node_id: NodeId, doc: Doc, node: RouterClient, autofetch: AutofetchPolicy) -> Self {
-        let author_id = iroh::docs::AuthorId::from(node_id.as_bytes());
+    pub fn new(node_id: NodeId, doc: Doc, node: Protocols, autofetch: AutofetchPolicy) -> Self {
+        let author_id = iroh_docs::AuthorId::from(node_id.as_bytes());
         let content_router =
             ContentRouter::new(author_id, node_id, doc.clone(), node.clone(), autofetch);
         Self {

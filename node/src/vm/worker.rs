@@ -9,17 +9,16 @@ use anyhow::{anyhow, Context, Result};
 use bytes::Bytes;
 use futures::StreamExt;
 use futures_buffered::try_join_all;
-use iroh::blobs::Hash;
-use iroh::client::docs::Entry;
-use iroh::client::Doc;
-use iroh::docs::AuthorId;
-use iroh::net::NodeId;
+use iroh::NodeId;
+use iroh_blobs::Hash;
+use iroh_docs::rpc::client::docs::Entry;
+use iroh_docs::AuthorId;
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
-use crate::router::RouterClient;
+use crate::iroh::{Doc, Protocols};
 use crate::space::Spaces;
 
 use super::blobs::Blobs;
@@ -43,7 +42,7 @@ pub struct Worker {
     executors: Executors,
     doc: Doc,
     blobs: Blobs,
-    router: RouterClient,
+    router: Protocols,
     current_jobs: Arc<Mutex<HashSet<Uuid>>>,
     /// If this worker will accept work.
     enabled: Arc<AtomicBool>,
@@ -52,7 +51,7 @@ pub struct Worker {
 impl Worker {
     pub async fn new(
         spaces: Spaces,
-        router: RouterClient,
+        router: Protocols,
         author_id: AuthorId,
         doc: Doc,
         blobs: Blobs,
@@ -92,7 +91,7 @@ impl Worker {
         let mut status: Option<JobStatus> = None;
 
         // query from all authors
-        let q = iroh::docs::store::Query::all()
+        let q = iroh_docs::store::Query::all()
             .key_prefix(format!("{}/status/{}/", JOBS_PREFIX, job_id));
         let mut entries = self.doc.get_many(q).await?;
 
@@ -136,6 +135,7 @@ impl Worker {
 
         let author = self
             .router
+            .docs()
             .authors()
             .export(scheduled_job.author)
             .await?
@@ -224,7 +224,7 @@ impl Worker {
 
     pub async fn get_execution_status(&self, job_id: Uuid) -> Result<ExecutionStatus> {
         let mut status = ExecutionStatus::Unknown;
-        let q = iroh::docs::store::Query::author(self.author_id)
+        let q = iroh_docs::store::Query::author(self.author_id)
             .key_prefix(Self::execution_status_prefix(job_id));
         let mut entries = self.doc.get_many(q).await?;
         while let Some(entry) = entries.next().await {

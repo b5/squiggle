@@ -3,9 +3,9 @@ use std::fmt::Write;
 use anyhow::{anyhow, Context, Result};
 use ed25519_dalek::Signature;
 use extism::ToBytes;
-use iroh::blobs::Hash;
-use iroh::docs::Author;
-use iroh::net::key::PublicKey;
+use iroh::PublicKey;
+use iroh_blobs::Hash;
+use iroh_docs::Author;
 use rusqlite::types::{FromSql, ToSqlOutput};
 use rusqlite::{params, ToSql};
 use serde::ser::SerializeStruct;
@@ -16,7 +16,7 @@ use std::fmt;
 use std::str::FromStr;
 use uuid::Uuid;
 
-use crate::router::RouterClient;
+use crate::iroh::Protocols;
 
 use super::db::DB;
 
@@ -292,11 +292,11 @@ impl<'de> Deserialize<'de> for HashLink {
 }
 
 impl HashLink {
-    pub async fn resolve(&mut self, router: &RouterClient) -> Result<Value> {
+    pub async fn resolve(&mut self, protos: &Protocols) -> Result<Value> {
         match self.data {
             Some(ref v) => Ok(v.clone()),
             None => {
-                let data = router.blobs().read_to_bytes(self.hash).await?;
+                let data = protos.blobs().read_to_bytes(self.hash).await?;
                 let value: Value = serde_json::from_slice(&data)?;
                 self.data = Some(value.clone());
                 Ok(value)
@@ -379,12 +379,8 @@ impl Event {
         Event::from_sql_row(row)
     }
 
-    pub(crate) async fn ingest_from_blob(
-        db: &DB,
-        router: &RouterClient,
-        hash: Hash,
-    ) -> Result<Self> {
-        let data = router.blobs().read_to_bytes(hash).await?;
+    pub(crate) async fn ingest_from_blob(db: &DB, protos: &Protocols, hash: Hash) -> Result<Self> {
+        let data = protos.blobs().read_to_bytes(hash).await?;
         let event: Self = serde_json::from_slice(&data)?;
         event.write(db).await?;
         Ok(event)
@@ -394,10 +390,10 @@ impl Event {
     /// sqlite db. This is for when we want to share events with others.
     pub(crate) async fn write_raw_to_blob(
         &self,
-        router: &RouterClient,
-    ) -> Result<(Hash, iroh::blobs::Tag)> {
+        protos: &Protocols,
+    ) -> Result<(Hash, iroh_blobs::Tag)> {
         let data = serde_json::to_vec(&self)?;
-        let result = router.blobs().add_bytes(data).await?;
+        let result = protos.blobs().add_bytes(data).await?;
         Ok((result.hash, result.tag))
     }
 
@@ -517,7 +513,7 @@ impl Event {
 
 // Define the EventObject trait
 pub(crate) trait EventObject {
-    async fn from_event(event: Event, client: &RouterClient) -> Result<Self>
+    async fn from_event(event: Event, client: &Protocols) -> Result<Self>
     where
         Self: Sized;
     fn into_mutate_event(&self, author: Author) -> Result<Event>;

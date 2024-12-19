@@ -3,15 +3,15 @@ use std::pin::Pin;
 use std::sync::Arc;
 
 use anyhow::Result;
-use futures::{Sink, SinkExt, StreamExt};
-use iroh::docs::NamespaceId;
-use iroh::gossip::net::Command;
+use futures::{Sink, SinkExt};
+use iroh_docs::NamespaceId;
+use iroh_gossip::net::Command;
 use tokio::sync::Mutex;
 
-use crate::router::RouterClient;
+use crate::iroh::Protocols;
 
 use super::events::Event;
-use super::users::all_user_node_ids;
+// use super::users::all_user_node_ids;
 use super::DB;
 
 struct Inner {
@@ -44,47 +44,49 @@ pub struct Sync {
 }
 
 impl Sync {
-    pub async fn start(db: &DB, router: &RouterClient, topic: NamespaceId) -> Result<Self> {
-        let bootstrap = all_user_node_ids(db, router).await?;
-        let (sync, mut stream) = router.gossip().subscribe(topic, bootstrap.clone()).await?;
+    pub async fn start(db: &DB, router: &Protocols, _topic: NamespaceId) -> Result<Self> {
+        // let bootstrap = all_user_node_ids(db, router).await?;
+        todo!();
 
-        let sink_task = tokio::task::spawn(async move {
-            while let Some(event) = stream.next().await {
-                let event = event
-                    .map_err(|e| tracing::error!("gossip error: {:?}", e))
-                    .ok();
-                if let Some(event) = event {
-                    match event {
-                        iroh::gossip::net::Event::Gossip(event) => match event {
-                            iroh::gossip::net::GossipEvent::NeighborUp(peer) => {
-                                tracing::info!("joined {:?}", peer)
-                            }
-                            iroh::gossip::net::GossipEvent::NeighborDown(peer) => {
-                                tracing::info!("left {:?}", peer)
-                            }
-                            iroh::gossip::net::GossipEvent::Received(message) => {
-                                tracing::info!("message {:?}", message)
-                            }
-                            iroh::gossip::net::GossipEvent::Joined(peers) => {
-                                tracing::info!("joined {:?}", peers)
-                            }
-                        },
-                        iroh::gossip::net::Event::Lagged => {
-                            tracing::warn!("gossip lagged")
-                        }
-                    }
-                }
-            }
-        });
+        // let mut topic = router.gossip().subscribe(topic.into(), bootstrap.clone())?;
 
-        let inner = Inner {
-            sink: Box::pin(sync),
-            sink_task,
-        };
+        // let sink_task = tokio::task::spawn(async move {
+        //     while let Some(event) = stream.next().await {
+        //         let event = event
+        //             .map_err(|e| tracing::error!("gossip error: {:?}", e))
+        //             .ok();
+        //         if let Some(event) = event {
+        //             match event {
+        //                 iroh_gossip::net::Event::Gossip(event) => match event {
+        //                     iroh_gossip::net::GossipEvent::NeighborUp(peer) => {
+        //                         tracing::info!("joined {:?}", peer)
+        //                     }
+        //                     iroh_gossip::net::GossipEvent::NeighborDown(peer) => {
+        //                         tracing::info!("left {:?}", peer)
+        //                     }
+        //                     iroh_gossip::net::GossipEvent::Received(message) => {
+        //                         tracing::info!("message {:?}", message)
+        //                     }
+        //                     iroh_gossip::net::GossipEvent::Joined(peers) => {
+        //                         tracing::info!("joined {:?}", peers)
+        //                     }
+        //                 },
+        //                 iroh_gossip::net::Event::Lagged => {
+        //                     tracing::warn!("gossip lagged")
+        //                 }
+        //             }
+        //         }
+        //     }
+        // });
 
-        Ok(Self {
-            inner: Arc::new(Mutex::new(inner)),
-        })
+        // let inner = Inner {
+        //     sink: Box::pin(sync),
+        //     sink_task,
+        // };
+
+        // Ok(Self {
+        //     inner: Arc::new(Mutex::new(inner)),
+        // })
     }
 
     pub async fn broadcast_event_update(&self, event: Event) -> Result<()> {

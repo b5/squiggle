@@ -1,13 +1,12 @@
 use anyhow::{anyhow, Result};
-use iroh::blobs::Hash;
-use iroh::docs::{Author, AuthorId};
-use iroh::net::key::PublicKey;
-use iroh::net::NodeId;
+use iroh::{NodeId, PublicKey};
+use iroh_blobs::Hash;
+use iroh_docs::{Author, AuthorId};
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::router::RouterClient;
+use crate::iroh::Protocols;
 
 use super::events::{Event, EventKind, EventObject, HashLink, Tag, NOSTR_ID_TAG};
 use super::{Space, DB, EVENT_SQL_READ_FIELDS};
@@ -47,7 +46,7 @@ pub struct User {
 }
 
 impl EventObject for User {
-    async fn from_event(event: Event, router: &RouterClient) -> Result<Self> {
+    async fn from_event(event: Event, router: &Protocols) -> Result<Self> {
         if event.kind != EventKind::MutateUser {
             return Err(anyhow!("event is not a user mutation"));
         }
@@ -66,7 +65,12 @@ impl EventObject for User {
         };
 
         let author = AuthorId::from(event.pubkey.as_bytes());
-        let author = router.authors().export(author).await.unwrap_or_default();
+        let author = router
+            .docs()
+            .authors()
+            .export(author)
+            .await
+            .unwrap_or_default();
 
         Ok(User {
             id,
@@ -109,7 +113,7 @@ impl User {
         })
     }
 
-    async fn from_sql_row(row: &rusqlite::Row<'_>, client: &RouterClient) -> Result<User> {
+    async fn from_sql_row(row: &rusqlite::Row<'_>, client: &Protocols) -> Result<User> {
         let event = Event::from_sql_row(row)?;
         Self::from_event(event, client).await
     }
@@ -166,7 +170,7 @@ impl Users {
     }
 }
 
-pub async fn all_user_node_ids(db: &DB, router: &RouterClient) -> Result<Vec<NodeId>> {
+pub async fn all_user_node_ids(db: &DB, router: &Protocols) -> Result<Vec<NodeId>> {
     let conn = db.lock().await;
     let mut stmt = conn.prepare(
         format!("SELECT {EVENT_SQL_READ_FIELDS} FROM events WHERE kind = ?1 LIMIT ?2 OFFSET ?3")

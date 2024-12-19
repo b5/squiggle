@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use iroh::docs::Author;
+use iroh_docs::Author;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 use uuid::Uuid;

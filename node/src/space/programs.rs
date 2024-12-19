@@ -3,12 +3,12 @@ use std::path::{Component, Path, PathBuf};
 use anyhow::{anyhow, Context, Result};
 use futures_buffered::BufferedStreamExt;
 use futures_lite::StreamExt;
-use iroh::blobs::format::collection::Collection;
-use iroh::blobs::util::SetTagOption;
-use iroh::blobs::Hash;
-use iroh::client::blobs::WrapOption;
-use iroh::docs::Author;
-use iroh::net::key::PublicKey;
+use iroh::PublicKey;
+use iroh_blobs::format::collection::Collection;
+use iroh_blobs::rpc::client::blobs::WrapOption;
+use iroh_blobs::util::SetTagOption;
+use iroh_blobs::Hash;
+use iroh_docs::Author;
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -18,7 +18,7 @@ use super::events::{
 };
 use super::tickets::ProgramTicket;
 use super::Space;
-use crate::router::RouterClient;
+use crate::iroh::Protocols;
 
 const MANIFEST_FILENAME: &str = "program.json";
 const DEFAULT_PROGRAM_ENTRY_FILENAME: &str = "index.wasm";
@@ -61,7 +61,7 @@ pub struct Program {
 }
 
 impl EventObject for Program {
-    async fn from_event(event: Event, client: &RouterClient) -> Result<Self> {
+    async fn from_event(event: Event, protos: &Protocols) -> Result<Self> {
         if event.kind != EventKind::MutateProgram {
             anyhow::bail!("event is not a program mutation");
         }
@@ -69,14 +69,14 @@ impl EventObject for Program {
         let id = event.data_id()?.ok_or_else(|| anyhow!("missing data id"))?;
 
         // fetch collection content
-        let collection = client.blobs().get_collection(event.content.hash).await?;
+        let collection = protos.blobs().get_collection(event.content.hash).await?;
 
         // extract the manifest
         let (_, manifest_hash) = collection
             .iter()
             .find(|item| item.0 == MANIFEST_FILENAME)
             .ok_or_else(|| anyhow!("missing manifest"))?;
-        let data = client.blobs().read_to_bytes(*manifest_hash).await?;
+        let data = protos.blobs().read_to_bytes(*manifest_hash).await?;
         let manifest: Manifest = serde_json::from_slice(&data)?;
         let (html_index, program_entry) = Program::hash_pointers(&manifest, &collection)?;
 
@@ -126,7 +126,7 @@ impl Program {
         Ok((html_index, program_entry))
     }
 
-    async fn from_sql_row(row: &rusqlite::Row<'_>, client: &RouterClient) -> Result<Program> {
+    async fn from_sql_row(row: &rusqlite::Row<'_>, client: &Protocols) -> Result<Program> {
         let event = Event::from_sql_row(row)?;
         Self::from_event(event, client).await
     }
@@ -195,18 +195,18 @@ impl Programs {
         Ok(program)
     }
 
-    pub async fn share(&self, router: &RouterClient, id: Uuid) -> Result<ProgramTicket> {
+    pub async fn share(&self, protos: &Protocols, id: Uuid) -> Result<ProgramTicket> {
         // get the raw event, write it to the store
         let program_event = Event::read_raw(&self.0.db, id).await?;
         let (program_event_hash, program_event_tag) =
-            program_event.write_raw_to_blob(router).await?;
+            program_event.write_raw_to_blob(protos).await?;
 
         // TODO - get profile information for the user, add to collection
 
         let head = vec![(String::from("event"), program_event_hash)];
 
         // get collection contents
-        let program_collection = router
+        let program_collection = protos
             .blobs()
             .get_collection(program_event.content.hash)
             .await?;
@@ -215,20 +215,19 @@ impl Programs {
         let collection =
             Collection::from_iter(head.into_iter().chain(program_collection.into_iter()));
 
-        let (hash, _) = router
+        let (hash, _) = protos
             .blobs()
             .create_collection(collection, SetTagOption::Auto, vec![program_event_tag])
             .await?;
 
         // get our dialing information
-        let mut addr = router.net().node_addr().await?;
-        addr.apply_options(iroh::base::node_addr::AddrInfoOptions::Id);
+        let addr = protos.endpoint().node_addr().await?;
 
         // create ticket
-        ProgramTicket::new(addr, hash, iroh::blobs::BlobFormat::HashSeq)
+        ProgramTicket::new(addr, hash, iroh_blobs::BlobFormat::HashSeq)
     }
 
-    pub async fn download(&self, router: &RouterClient, ticket: ProgramTicket) -> Result<Program> {
+    pub async fn download(&self, router: &Protocols, ticket: ProgramTicket) -> Result<Program> {
         let addr = ticket.node_addr().clone();
         // fetch the blob
         router
@@ -396,7 +395,7 @@ pub fn canonicalized_path_to_string(
 /// If the input is a directory, the collection contains all the files in the
 /// directory.
 async fn import(
-    db: &iroh::client::blobs::Client,
+    db: &crate::iroh::BlobsClient,
     path: PathBuf,
 ) -> anyhow::Result<(Hash, u64, Collection)> {
     let root = path.clone();

@@ -4,16 +4,16 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use flow::{Flow, Task, TaskOutput};
 use futures::StreamExt;
-use iroh::base::node_addr::AddrInfoOptions;
-use iroh::client::docs::ShareMode;
-use iroh::docs::{Author, AuthorId, DocTicket, NamespaceId};
-use iroh::net::NodeId;
+use iroh::NodeId;
+use iroh_docs::rpc::client::docs::ShareMode;
+use iroh_docs::rpc::AddrInfoOptions;
+use iroh_docs::{Author, AuthorId, DocTicket, NamespaceId};
 use job::{Artifacts, DEFAULT_TIMEOUT};
 use tokio::task::JoinHandle;
 use tracing::{debug, info, info_span, warn, Instrument};
 use uuid::Uuid;
 
-use crate::router::RouterClient;
+use crate::iroh::Protocols;
 
 use crate::space::{Space, Spaces};
 use crate::vm::blobs::Blobs;
@@ -37,7 +37,7 @@ mod worker;
 
 #[derive(Debug)]
 pub struct VM {
-    router: RouterClient,
+    protocols: Protocols,
     doc: Doc,
     blobs: Blobs,
     scheduler: Scheduler,
@@ -47,14 +47,14 @@ pub struct VM {
 }
 
 impl VM {
-    pub async fn create(spaces: Spaces, router: &RouterClient, cfg: VMConfig) -> Result<Self> {
+    pub async fn create(spaces: Spaces, router: &Protocols, cfg: VMConfig) -> Result<Self> {
         let doc = create_doc(&router.clone()).await?;
         Self::open(spaces, router, doc, cfg).await
     }
 
     pub async fn join(
         spaces: Spaces,
-        router: &RouterClient,
+        router: &Protocols,
         ticket: DocTicket,
         cfg: VMConfig,
     ) -> Result<Self> {
@@ -63,13 +63,8 @@ impl VM {
         Self::open(spaces, router, doc, cfg).await
     }
 
-    pub async fn open(
-        spaces: Spaces,
-        router: &RouterClient,
-        doc: Doc,
-        cfg: VMConfig,
-    ) -> Result<Self> {
-        let node_id = router.net().node_id().await?;
+    pub async fn open(spaces: Spaces, router: &Protocols, doc: Doc, cfg: VMConfig) -> Result<Self> {
+        let node_id = router.endpoint().node_id();
         let blobs = Blobs::new(node_id, doc.clone(), router.clone(), cfg.autofetch);
         let author_id = node_author_id(&node_id);
         let scheduler =
@@ -110,7 +105,7 @@ impl VM {
         );
 
         let ws = Self {
-            router: router.clone(),
+            protocols: router.clone(),
             doc,
             blobs,
             scheduler,
